@@ -30,15 +30,19 @@ pub fn walkProject(allocator: std.mem.Allocator, path: []const u8) ![]POptions {
     defer walker.deinit();
 
     const kinds = std.fs.IterableDir.Entry.Kind;
+
     while (true) {
         var d = try walker.next();
         if (d == null) {
             break;
         }
-
+        if (isHiddenPath(d.?.path)) {
+            continue;
+        }
         if (d.?.kind == kinds.file) {
-            if (try isExecutable(allocator, try std.fs.path.join(allocator, &[_][]const u8{ path, d.?.path }))) {
-                std.debug.print("Found Executable!:{s}\n", .{d.?.path});
+            var interpreter = try getShebang(allocator, try std.fs.path.join(allocator, &[_][]const u8{ path, d.?.path }));
+            if (interpreter != null) {
+                std.debug.print("Found a Shebang Script!:{s}: {!s}\n", .{ d.?.path, interpreter.? });
             }
         }
     }
@@ -46,8 +50,50 @@ pub fn walkProject(allocator: std.mem.Allocator, path: []const u8) ![]POptions {
     return try pops.toOwnedSlice();
 }
 
-// These are scripts that start with a shebang line.
-fn isExecutable(allocator: std.mem.Allocator, path: []const u8) !bool {
+fn isHiddenPath(path: []const u8) bool {
+    if (path.len == 0) {
+        return false;
+    }
+    if (path[0] == '.') {
+        return true;
+    }
+    if (strs.contains(path, "/.")) {
+        return true;
+    }
+    return false;
+}
+
+test "detect hidden paths" {
+    const cases = [_][]const u8{
+        ".git/abc",
+        "foo/.git",
+        "foo",
+        "foo/bar",
+        "foo/ar",
+        "foo/.git/bar",
+        "foo/.git/.git",
+        "foo/wow/.k.sh",
+    };
+
+    const expected = [_]bool{
+        true,
+        true,
+        false,
+        false,
+        false,
+        true,
+        true,
+        true,
+    };
+
+    for (cases, 0..) |path, i| {
+        const actual = isHiddenPath(path);
+        try testing.expectEqual(actual, expected[i]);
+    }
+}
+
+// Returns the associated interpreter. Returns null if the file is not a shebang script.
+fn getShebang(allocator: std.mem.Allocator, path: []const u8) !?[]const u8 {
     var file = try std.fs.openFileAbsolute(path, .{});
     defer file.close();
 
@@ -57,22 +103,18 @@ fn isExecutable(allocator: std.mem.Allocator, path: []const u8) !bool {
     var writer = line.writer();
 
     var reader = file.reader();
-    try reader.streamUntilDelimiter(writer, '\n', null);
 
-    if (strs.startsWith(try line.toOwnedSlice(), "#!")) {
-        return true;
-    } else {
-        return false;
+    // Improve this to handle errors better
+    if (reader.streamUntilDelimiter(writer, '\n', null)) {} else |_| {
+        return null;
     }
-}
 
-test "test_executable" {
-    var arena = std.heap.ArenaAllocator.init(std.heap.page_allocator);
-    defer arena.deinit();
-    const allocator = arena.allocator();
-
-    try testing.expectEqual(true, try isExecutable(allocator, "/home/tchaudhr/test.sh"));
-    try testing.expectEqual(false, try isExecutable(allocator, "/home/tchaudhr/test2.sh"));
+    const slice = try line.toOwnedSlice();
+    if (strs.startsWith(slice, "#!")) {
+        return slice[2..];
+    } else {
+        return null;
+    }
 }
 
 test "walk_dir" {
@@ -80,6 +122,6 @@ test "walk_dir" {
     defer arena.deinit();
     const allocator = arena.allocator();
 
-    var types = try walkProject(allocator, "/home/tchaudhr/Workspace/mynt");
+    var types = try walkProject(allocator, "/home/tchaudhr/Workspace");
     _ = types;
 }

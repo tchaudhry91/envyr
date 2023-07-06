@@ -216,3 +216,53 @@ test "concat" {
         try testing.expectEqualStrings(expected, actual);
     }
 }
+
+// Check if the string contains the substring
+pub fn contains(s: []const u8, sub: []const u8) bool {
+    if (sub.len > s.len) {
+        return false;
+    }
+    for (s, 0..) |c, i| {
+        if (c == sub[0]) {
+            var found = true;
+            for (sub, 0..) |sc, j| {
+                if (s[i + j] != sc) {
+                    found = false;
+                    break;
+                }
+            }
+            if (found) {
+                return true;
+            }
+        }
+    }
+    return false;
+}
+
+test "contains" {
+    const inputs = [_][]const u8{
+        "hello world",
+        "ab ab",
+        "abab",
+        "a  b",
+    };
+
+    const subs = [_][]const u8{
+        "hello",
+        "ab",
+        "bab",
+        "asdfsdfs",
+    };
+
+    const expecteds = [_]bool{
+        true,
+        true,
+        true,
+        false,
+    };
+
+    for (inputs, subs, expecteds) |s, sub, expected| {
+        const actual = contains(s, sub);
+        try testing.expectEqual(expected, actual);
+    }
+}
