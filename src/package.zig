@@ -2,27 +2,19 @@ const std = @import("std");
 const strs = @import("./string_utils.zig");
 const testing = std.testing;
 
-pub const POptions = struct {
-    types: []PType,
+const Envy = struct {
     entrypoints: []Entrypoint,
-    packages: [][]const u8,
+    packages: []Package,
 };
+
+const Package = struct {};
 
 const Entrypoint = struct {
     path: []const u8,
     interpreter: []const u8,
 };
 
-const PType = enum {
-    Unknown,
-    Python,
-    Bash,
-};
-
-pub fn walkProject(allocator: std.mem.Allocator, path: []const u8) ![]POptions {
-    var pops = std.ArrayList(POptions).init(allocator);
-    defer pops.deinit();
-
+pub fn walkProject(allocator: std.mem.Allocator, path: []const u8) !void {
     var dir = try std.fs.openIterableDirAbsolute(path, .{});
     defer dir.close();
 
@@ -46,8 +38,6 @@ pub fn walkProject(allocator: std.mem.Allocator, path: []const u8) ![]POptions {
             }
         }
     }
-
-    return try pops.toOwnedSlice();
 }
 
 fn isHiddenPath(path: []const u8) bool {
