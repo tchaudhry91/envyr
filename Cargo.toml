@@ -8,3 +8,4 @@ edition = "2021"
 [dependencies]
 anyhow = "1.0"
 clap = "4.3.11"
+walkdir = "2.3.3"
