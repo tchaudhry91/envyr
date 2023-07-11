@@ -1,21 +1,44 @@
 use super::utils;
 use anyhow::Result;
+use clap::ValueEnum;
 use pathdiff::diff_paths;
-use std::io::{self, BufRead};
-use std::{fs::File, path::PathBuf};
+use std::path::PathBuf;
 use walkdir::{DirEntry, WalkDir};
+
+#[derive(Debug, Default, Clone, ValueEnum)]
+pub enum PType {
+    Python,
+    Node,
+    Shell,
+    #[default]
+    Other,
+}
 
 // Pack is the base struct holding the Package information.
 #[derive(Debug)]
 pub struct Pack {
     pub name: String,
     pub interpreter: String,
+    pub ptype: PType,
     pub entrypoint: String,
-    pub deps: Vec<String>,
 }
 impl Pack {
-    pub fn builder() -> PackBuilder {
-        PackBuilder::default()
+    pub fn builder(project_root: PathBuf) -> Result<PackBuilder> {
+        let mut builder = PackBuilder::default();
+        builder.name = detect_name(&project_root);
+
+        // Try to detect project type.
+
+        // Move on to executable detection.
+        builder.executables = get_executable_files(&project_root)?;
+        // Only handle the case where there is exactly one executable found.
+        if builder.executables.len() == 1 {
+            builder.interpreter = Some(builder.executables[0].1.clone());
+            let entrypoint = builder.executables[0].0.to_path_buf();
+            let entrypoint = diff_paths(&entrypoint, &project_root).unwrap_or_default();
+            builder.entrypoint = Some(entrypoint.to_str().unwrap_or_default().to_string());
+        }
+        Ok(builder)
     }
 }
 
@@ -24,24 +47,11 @@ pub struct PackBuilder {
     name: Option<String>,
     interpreter: Option<String>,
     entrypoint: Option<String>,
-    deps: Option<Vec<String>>,
+    executables: Vec<(PathBuf, String)>,
+    ptype: PType,
 }
 
 impl PackBuilder {
-    pub fn new(project_root: PathBuf) -> Result<Self> {
-        let mut builder = PackBuilder::default();
-        builder.name = detect_name(&project_root);
-        let executable_files = get_executable_files(&project_root)?;
-        // Only handle the case where there is exactly one executable found.
-        if executable_files.len() == 1 {
-            builder.interpreter = Some(executable_files[0].1.clone());
-            let entrypoint = executable_files[0].0.to_path_buf();
-            let entrypoint = diff_paths(&entrypoint, &project_root).unwrap_or_default();
-            builder.entrypoint = Some(entrypoint.to_str().unwrap_or_default().to_string());
-        }
-        Ok(builder)
-    }
-
     pub fn name(mut self, name: String) -> Self {
         self.name = Some(name);
         self
@@ -57,17 +67,40 @@ impl PackBuilder {
         self
     }
 
-    pub fn deps(mut self, deps: Vec<String>) -> Self {
-        self.deps = Some(deps);
+    pub fn ptype(mut self, ptype: PType) -> Self {
+        self.ptype = ptype;
         self
     }
 
     pub fn build(self) -> Result<Pack> {
+        // Check values
+        if self.name.is_none() {
+            return Err(anyhow::anyhow!(
+                "Could not detect project name. Please specify it manually."
+            ));
+        }
+        if self.entrypoint.is_none() {
+            if self.executables.len() < 1 {
+                return Err(anyhow::anyhow!(
+                    "Could not detect project entrypoint. Please specify it manually."
+                ));
+            } else {
+                return Err(anyhow::anyhow!(
+                    "Multiple entrypoints detected! {:?}. Please choose one manually.",
+                    self.executables
+                ));
+            }
+        }
+        if self.interpreter.is_none() {
+            return Err(anyhow::anyhow!(
+                "Could not detect project interpreter. Please specify it manually."
+            ));
+        }
         Ok(Pack {
             name: self.name.unwrap_or_default(),
             interpreter: self.interpreter.unwrap_or_default(),
             entrypoint: self.entrypoint.unwrap_or_default(),
-            deps: self.deps.unwrap_or_default(),
+            ptype: self.ptype,
         })
     }
 }
@@ -136,10 +169,7 @@ mod tests {
     #[test]
     fn test_build_package() {
         let project_root = PathBuf::from("/home/tchaudhr/Workspace/sandbox");
-        let pack = PackBuilder::new(PathBuf::from(project_root))
-            .unwrap()
-            .build()
-            .unwrap();
+        let pack = Pack::builder(project_root).unwrap().build().unwrap();
         assert_eq!(pack.name, "sandbox");
         assert_eq!(pack.interpreter, "/usr/bin/env python");
         assert_eq!(pack.entrypoint, "main.py");

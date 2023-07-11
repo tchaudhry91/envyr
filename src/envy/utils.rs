@@ -8,6 +8,8 @@ use std::{
 
 use anyhow::Result;
 
+use super::package::PType;
+
 // Checks if the file contains a python main.
 pub fn check_python_main(f: &PathBuf) -> Result<bool> {
     let code = std::fs::read_to_string(f)?;
@@ -28,4 +30,30 @@ pub fn check_shebang_file(file: &PathBuf) -> Result<Option<String>> {
         return Ok(Some(line[2..].to_string()));
     }
     return Ok(None);
+}
+
+pub fn map_extension_to_ptype(ext: &str) -> Option<PType> {
+    return match ext {
+        "py" => Some(PType::Python),
+        "sh" => Some(PType::Shell),
+        "js" => Some(PType::Node),
+        "ts" => Some(PType::Node),
+        _ => None,
+    };
+}
+
+pub fn check_package_json(project_root: &PathBuf) -> Result<bool> {
+    let package_json = project_root.join("package.json");
+    if package_json.exists() {
+        return Ok(true);
+    }
+    return Ok(false);
+}
+
+pub fn check_requirements_txt(project_root: &PathBuf) -> Result<bool> {
+    let requirements_txt = project_root.join("requirements.txt");
+    if requirements_txt.exists() {
+        return Ok(true);
+    }
+    return Ok(false);
 }

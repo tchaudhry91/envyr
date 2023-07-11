@@ -13,11 +13,40 @@ struct Args {
     // Project Root
     #[arg(long, short, default_value_os_t = PathBuf::from("."))]
     project_root: PathBuf,
+
+    #[arg(long, short)]
+    name: Option<String>,
+
+    #[arg(long, short)]
+    interpreter: Option<String>,
+
+    #[arg(long, short)]
+    entrypoint: Option<String>,
+
+    #[arg(long = "type", short = 't', value_enum)]
+    ptype: Option<envy::package::PType>,
 }
 
 fn main() -> Result<()> {
     let args = Args::parse();
-    let pack = envy::package::PackBuilder::new(args.project_root)?.build()?;
+    let canon_path = std::fs::canonicalize(&args.project_root)?;
+    let mut pack_builder = envy::package::Pack::builder(canon_path)?;
+
+    // Overwrite params if needed
+    if let Some(name) = args.name {
+        pack_builder = pack_builder.name(name);
+    }
+
+    if let Some(interpreter) = args.interpreter {
+        pack_builder = pack_builder.interpreter(interpreter);
+    }
+
+    if let Some(entrypoint) = args.entrypoint {
+        pack_builder = pack_builder.entrypoint(entrypoint);
+    }
+
+    let pack = pack_builder.build()?;
+
     println!("{:?}", pack);
     Ok(())
 }
