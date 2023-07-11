@@ -9,7 +9,7 @@ use walkdir::{DirEntry, WalkDir};
 #[derive(Debug)]
 pub struct Pack {
     pub name: String,
-    pub interpretter: String,
+    pub interpreter: String,
     pub entrypoint: String,
     pub deps: Vec<String>,
 }
@@ -22,7 +22,7 @@ impl Pack {
 #[derive(Default)]
 pub struct PackBuilder {
     name: Option<String>,
-    interpretter: Option<String>,
+    interpreter: Option<String>,
     entrypoint: Option<String>,
     deps: Option<Vec<String>>,
 }
@@ -34,7 +34,7 @@ impl PackBuilder {
         let executable_files = get_executable_files(&project_root)?;
         // Only handle the case where there is exactly one executable found.
         if executable_files.len() == 1 {
-            builder.interpretter = Some(executable_files[0].1.clone());
+            builder.interpreter = Some(executable_files[0].1.clone());
             let entrypoint = executable_files[0].0.to_path_buf();
             let entrypoint = diff_paths(&entrypoint, &project_root).unwrap_or_default();
             builder.entrypoint = Some(entrypoint.to_str().unwrap_or_default().to_string());
@@ -47,8 +47,8 @@ impl PackBuilder {
         self
     }
 
-    pub fn interpretter(mut self, interpretter: String) -> Self {
-        self.interpretter = Some(interpretter);
+    pub fn interpreter(mut self, interpreter: String) -> Self {
+        self.interpreter = Some(interpreter);
         self
     }
 
@@ -65,7 +65,7 @@ impl PackBuilder {
     pub fn build(self) -> Result<Pack> {
         Ok(Pack {
             name: self.name.unwrap_or_default(),
-            interpretter: self.interpretter.unwrap_or_default(),
+            interpreter: self.interpreter.unwrap_or_default(),
             entrypoint: self.entrypoint.unwrap_or_default(),
             deps: self.deps.unwrap_or_default(),
         })
@@ -141,7 +141,7 @@ mod tests {
             .build()
             .unwrap();
         assert_eq!(pack.name, "sandbox");
-        assert_eq!(pack.interpretter, "/usr/bin/env python");
+        assert_eq!(pack.interpreter, "/usr/bin/env python");
         assert_eq!(pack.entrypoint, "main.py");
     }
 }
