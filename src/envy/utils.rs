@@ -9,7 +9,7 @@ use std::{
 use anyhow::Result;
 
 // Checks if the file contains a python main.
-pub fn check_python_main(f: PathBuf) -> Result<bool> {
+pub fn check_python_main(f: &PathBuf) -> Result<bool> {
     let code = std::fs::read_to_string(f)?;
     if code.contains("if __name__ == \"__main__\":") {
         return Ok(true);
@@ -17,7 +17,8 @@ pub fn check_python_main(f: PathBuf) -> Result<bool> {
     return Ok(false);
 }
 
-pub fn check_shebang_file(file: PathBuf) -> Result<Option<String>> {
+// Returns the interpretter of the file if a shebang is found on top.
+pub fn check_shebang_file(file: &PathBuf) -> Result<Option<String>> {
     let file = File::open(file)?;
     let mut reader = io::BufReader::new(file);
     let mut line = vec![];

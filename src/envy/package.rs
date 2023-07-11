@@ -1,15 +1,80 @@
 use super::utils;
 use anyhow::Result;
+use pathdiff::diff_paths;
 use std::io::{self, BufRead};
 use std::{fs::File, path::PathBuf};
 use walkdir::{DirEntry, WalkDir};
 
 // Pack is the base struct holding the Package information.
+#[derive(Debug)]
 pub struct Pack {
     pub name: String,
     pub interpretter: String,
-    pub entrypoints: Vec<String>,
+    pub entrypoint: String,
     pub deps: Vec<String>,
+}
+impl Pack {
+    pub fn builder() -> PackBuilder {
+        PackBuilder::default()
+    }
+}
+
+#[derive(Default)]
+pub struct PackBuilder {
+    name: Option<String>,
+    interpretter: Option<String>,
+    entrypoint: Option<String>,
+    deps: Option<Vec<String>>,
+}
+
+impl PackBuilder {
+    pub fn new(project_root: PathBuf) -> Result<Self> {
+        let mut builder = PackBuilder::default();
+        builder.name = detect_name(&project_root);
+        let executable_files = get_executable_files(&project_root)?;
+        // Only handle the case where there is exactly one executable found.
+        if executable_files.len() == 1 {
+            builder.interpretter = Some(executable_files[0].1.clone());
+            let entrypoint = executable_files[0].0.to_path_buf();
+            let entrypoint = diff_paths(&entrypoint, &project_root).unwrap_or_default();
+            builder.entrypoint = Some(entrypoint.to_str().unwrap_or_default().to_string());
+        }
+        Ok(builder)
+    }
+
+    pub fn name(mut self, name: String) -> Self {
+        self.name = Some(name);
+        self
+    }
+
+    pub fn interpretter(mut self, interpretter: String) -> Self {
+        self.interpretter = Some(interpretter);
+        self
+    }
+
+    pub fn entrypoint(mut self, entrypoint: String) -> Self {
+        self.entrypoint = Some(entrypoint);
+        self
+    }
+
+    pub fn deps(mut self, deps: Vec<String>) -> Self {
+        self.deps = Some(deps);
+        self
+    }
+
+    pub fn build(self) -> Result<Pack> {
+        Ok(Pack {
+            name: self.name.unwrap_or_default(),
+            interpretter: self.interpretter.unwrap_or_default(),
+            entrypoint: self.entrypoint.unwrap_or_default(),
+            deps: self.deps.unwrap_or_default(),
+        })
+    }
+}
+
+fn detect_name(project_root: &PathBuf) -> Option<String> {
+    let name = project_root.file_name()?.to_str()?;
+    Some(name.to_string())
 }
 
 fn is_hidden(entry: &DirEntry) -> bool {
@@ -20,8 +85,8 @@ fn is_hidden(entry: &DirEntry) -> bool {
         .unwrap_or(false)
 }
 
-fn get_executable_files(project_root: PathBuf) -> Result<Vec<PathBuf>> {
-    let mut executable_files: Vec<PathBuf> = vec![];
+fn get_executable_files(project_root: &PathBuf) -> Result<Vec<(PathBuf, String)>> {
+    let mut executable_files: Vec<(PathBuf, String)> = vec![];
 
     for entry in WalkDir::new(project_root)
         .into_iter()
@@ -32,9 +97,9 @@ fn get_executable_files(project_root: PathBuf) -> Result<Vec<PathBuf>> {
                 if entry.file_type().is_file() {
                     // Check for a basic shebang first
                     let shebang_file =
-                        utils::check_shebang_file(entry.path().to_path_buf()).unwrap_or(None);
-                    if shebang_file.is_some() {
-                        executable_files.push(entry.path().to_path_buf());
+                        utils::check_shebang_file(&entry.path().to_path_buf()).unwrap_or(None);
+                    if let Some(shebang_file) = shebang_file {
+                        executable_files.push((entry.path().to_path_buf(), shebang_file));
                         continue;
                     }
 
@@ -42,9 +107,12 @@ fn get_executable_files(project_root: PathBuf) -> Result<Vec<PathBuf>> {
                     // and if it has a python main.
                     if entry.path().extension().unwrap_or_default() == "py" {
                         let python_main =
-                            utils::check_python_main(entry.path().to_path_buf()).unwrap_or(false);
+                            utils::check_python_main(&entry.path().to_path_buf()).unwrap_or(false);
                         if python_main {
-                            executable_files.push(entry.path().to_path_buf());
+                            executable_files.push((
+                                entry.path().to_path_buf(),
+                                "/usr/bin/env python".to_string(),
+                            ));
                             continue;
                         }
                     }
@@ -59,14 +127,21 @@ fn get_executable_files(project_root: PathBuf) -> Result<Vec<PathBuf>> {
     Ok(executable_files)
 }
 
+// This is a test that only works locally for now.
+// It is a development convenience. Remove later
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn test_get_executable_files() {
-        let shebang_files =
-            get_executable_files(PathBuf::from("/home/tchaudhry/Workspace/cassini")).unwrap();
-        println!("{:?}", shebang_files);
+    fn test_build_package() {
+        let project_root = PathBuf::from("/home/tchaudhr/Workspace/sandbox");
+        let pack = PackBuilder::new(PathBuf::from(project_root))
+            .unwrap()
+            .build()
+            .unwrap();
+        assert_eq!(pack.name, "sandbox");
+        assert_eq!(pack.interpretter, "/usr/bin/env python");
+        assert_eq!(pack.entrypoint, "main.py");
     }
 }
