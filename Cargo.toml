@@ -7,6 +7,6 @@ edition = "2021"
 
 [dependencies]
 anyhow = "1.0"
-clap = "4.3.11"
+clap = { version = "4.3.11", features = ["derive"] }
 pathdiff = "0.2.1"
 walkdir = "2.3.3"
