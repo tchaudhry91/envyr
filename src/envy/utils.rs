@@ -42,18 +42,18 @@ pub fn map_extension_to_ptype(ext: &str) -> Option<PType> {
     };
 }
 
-pub fn check_package_json(project_root: &PathBuf) -> Result<bool> {
+pub fn check_package_json(project_root: &PathBuf) -> bool {
     let package_json = project_root.join("package.json");
     if package_json.exists() {
-        return Ok(true);
+        return true;
     }
-    return Ok(false);
+    false
 }
 
-pub fn check_requirements_txt(project_root: &PathBuf) -> Result<bool> {
+pub fn check_requirements_txt(project_root: &PathBuf) -> bool {
     let requirements_txt = project_root.join("requirements.txt");
     if requirements_txt.exists() {
-        return Ok(true);
+        return true;
     }
-    return Ok(false);
+    false
 }

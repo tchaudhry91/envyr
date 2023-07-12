@@ -2,6 +2,7 @@ mod envy;
 
 use anyhow::Result;
 use clap::Parser;
+use serde_json;
 use std::path::PathBuf;
 
 #[derive(Parser)]
@@ -21,7 +22,7 @@ struct Args {
     interpreter: Option<String>,
 
     #[arg(long, short)]
-    entrypoint: Option<String>,
+    entrypoint: Option<PathBuf>,
 
     #[arg(long = "type", short = 't', value_enum)]
     ptype: Option<envy::package::PType>,
@@ -45,8 +46,12 @@ fn main() -> Result<()> {
         pack_builder = pack_builder.entrypoint(entrypoint);
     }
 
+    if let Some(ptype) = args.ptype {
+        pack_builder = pack_builder.ptype(ptype);
+    }
+
     let pack = pack_builder.build()?;
 
-    println!("{:?}", pack);
+    println!("{}", serde_json::to_string_pretty(&pack)?);
     Ok(())
 }

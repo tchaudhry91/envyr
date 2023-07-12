@@ -2,10 +2,11 @@ use super::utils;
 use anyhow::Result;
 use clap::ValueEnum;
 use pathdiff::diff_paths;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
 use walkdir::{DirEntry, WalkDir};
 
-#[derive(Debug, Default, Clone, ValueEnum)]
+#[derive(Debug, Default, Clone, ValueEnum, Serialize, Deserialize)]
 pub enum PType {
     Python,
     Node,
@@ -15,29 +16,16 @@ pub enum PType {
 }
 
 // Pack is the base struct holding the Package information.
-#[derive(Debug)]
+#[derive(Debug, Serialize, Deserialize)]
 pub struct Pack {
     pub name: String,
     pub interpreter: String,
     pub ptype: PType,
-    pub entrypoint: String,
+    pub entrypoint: PathBuf,
 }
 impl Pack {
     pub fn builder(project_root: PathBuf) -> Result<PackBuilder> {
-        let mut builder = PackBuilder::default();
-        builder.name = detect_name(&project_root);
-
-        // Try to detect project type.
-
-        // Move on to executable detection.
-        builder.executables = get_executable_files(&project_root)?;
-        // Only handle the case where there is exactly one executable found.
-        if builder.executables.len() == 1 {
-            builder.interpreter = Some(builder.executables[0].1.clone());
-            let entrypoint = builder.executables[0].0.to_path_buf();
-            let entrypoint = diff_paths(&entrypoint, &project_root).unwrap_or_default();
-            builder.entrypoint = Some(entrypoint.to_str().unwrap_or_default().to_string());
-        }
+        let builder = analyse_project(&project_root)?;
         Ok(builder)
     }
 }
@@ -46,7 +34,7 @@ impl Pack {
 pub struct PackBuilder {
     name: Option<String>,
     interpreter: Option<String>,
-    entrypoint: Option<String>,
+    entrypoint: Option<PathBuf>,
     executables: Vec<(PathBuf, String)>,
     ptype: PType,
 }
@@ -62,7 +50,7 @@ impl PackBuilder {
         self
     }
 
-    pub fn entrypoint(mut self, entrypoint: String) -> Self {
+    pub fn entrypoint(mut self, entrypoint: PathBuf) -> Self {
         self.entrypoint = Some(entrypoint);
         self
     }
@@ -72,7 +60,7 @@ impl PackBuilder {
         self
     }
 
-    pub fn build(self) -> Result<Pack> {
+    pub fn build(mut self) -> Result<Pack> {
         // Check values
         if self.name.is_none() {
             return Err(anyhow::anyhow!(
@@ -84,11 +72,14 @@ impl PackBuilder {
                 return Err(anyhow::anyhow!(
                     "Could not detect project entrypoint. Please specify it manually."
                 ));
-            } else {
+            } else if self.executables.len() > 1 {
                 return Err(anyhow::anyhow!(
                     "Multiple entrypoints detected! {:?}. Please choose one manually.",
                     self.executables
                 ));
+            } else {
+                self.entrypoint = Some(self.executables[0].0.clone());
+                self.interpreter = Some(self.executables[0].1.clone());
             }
         }
         if self.interpreter.is_none() {
@@ -117,10 +108,29 @@ fn is_hidden(entry: &DirEntry) -> bool {
         .map(|s| s.starts_with("."))
         .unwrap_or(false)
 }
+fn detect_ptype(project_root: &PathBuf) -> Option<PType> {
+    // Check package.json
+    if utils::check_package_json(project_root) {
+        return Some(PType::Node);
+    }
+    // Check requirements.txt
+    if utils::check_requirements_txt(project_root) {
+        return Some(PType::Python);
+    }
+    None
+}
 
-fn get_executable_files(project_root: &PathBuf) -> Result<Vec<(PathBuf, String)>> {
-    let mut executable_files: Vec<(PathBuf, String)> = vec![];
+fn analyse_project(project_root: &PathBuf) -> Result<PackBuilder> {
+    let mut builder = PackBuilder::default();
+    // Detect Name
+    builder.name = detect_name(&project_root);
 
+    // See if the project type can be ascertained
+    if let Some(ptype) = detect_ptype(&project_root) {
+        builder.ptype = ptype;
+    }
+
+    // Walk the project directory
     for entry in WalkDir::new(project_root)
         .into_iter()
         .filter_entry(|e| !is_hidden(e))
@@ -128,26 +138,17 @@ fn get_executable_files(project_root: &PathBuf) -> Result<Vec<(PathBuf, String)>
         match entry {
             Ok(entry) => {
                 if entry.file_type().is_file() {
-                    // Check for a basic shebang first
-                    let shebang_file =
-                        utils::check_shebang_file(&entry.path().to_path_buf()).unwrap_or(None);
-                    if let Some(shebang_file) = shebang_file {
-                        executable_files.push((entry.path().to_path_buf(), shebang_file));
-                        continue;
+                    // Do a series of checks
+                    // 1. Check a possible entrypoint
+                    if let Some((f, interpreter)) = detect_possible_entrypoint(&entry) {
+                        let relative_path = diff_paths(&f, &project_root).expect(
+                            "Path Diff Error, this should not happen while walking the dir.",
+                        );
+                        builder.executables.push((relative_path, interpreter));
                     }
-
-                    // Check if the file has a .py extension
-                    // and if it has a python main.
-                    if entry.path().extension().unwrap_or_default() == "py" {
-                        let python_main =
-                            utils::check_python_main(&entry.path().to_path_buf()).unwrap_or(false);
-                        if python_main {
-                            executable_files.push((
-                                entry.path().to_path_buf(),
-                                "/usr/bin/env python".to_string(),
-                            ));
-                            continue;
-                        }
+                    // 2. Check the file extensions and update ptype if necessary
+                    if let Some(ptype) = detect_ptype_from_extension(&entry) {
+                        builder.ptype = ptype;
                     }
                 }
             }
@@ -157,7 +158,32 @@ fn get_executable_files(project_root: &PathBuf) -> Result<Vec<(PathBuf, String)>
         }
     }
 
-    Ok(executable_files)
+    Ok(builder)
+}
+
+fn detect_ptype_from_extension(entry: &DirEntry) -> Option<PType> {
+    let extension = entry.path().extension()?.to_str()?;
+    utils::map_extension_to_ptype(extension)
+}
+
+fn detect_possible_entrypoint(entry: &DirEntry) -> Option<(PathBuf, String)> {
+    if let Some(interpreter) =
+        utils::check_shebang_file(&entry.path().to_path_buf()).unwrap_or(None)
+    {
+        return Some((entry.path().to_path_buf(), interpreter));
+    }
+
+    // Check if the file has a .py extension
+    // and if it has a python main.
+    if entry.path().extension().unwrap_or_default() == "py" {
+        if utils::check_python_main(&entry.path().to_path_buf()).unwrap_or(false) {
+            return Some((
+                entry.path().to_path_buf(),
+                "/usr/bin/env python".to_string(),
+            ));
+        }
+    }
+    None
 }
 
 // This is a test that only works locally for now.
