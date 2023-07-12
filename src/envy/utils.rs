@@ -3,7 +3,7 @@
 use std::{
     fs::File,
     io::{self, BufRead},
-    path::PathBuf,
+    path::{Path, PathBuf},
 };
 
 use anyhow::Result;
@@ -16,7 +16,7 @@ pub fn check_python_main(f: &PathBuf) -> Result<bool> {
     if code.contains("if __name__ == \"__main__\":") {
         return Ok(true);
     }
-    return Ok(false);
+    Ok(false)
 }
 
 // Returns the interpretter of the file if a shebang is found on top.
@@ -27,22 +27,24 @@ pub fn check_shebang_file(file: &PathBuf) -> Result<Option<String>> {
     _ = reader.read_until(b'\n', &mut line)?;
     let line = String::from_utf8(line)?.trim().to_string();
     if line.starts_with("#!") {
-        return Ok(Some(line[2..].to_string()));
+        return Ok(Some(
+            line.strip_prefix("#!").unwrap_or_default().to_string(),
+        ));
     }
-    return Ok(None);
+    Ok(None)
 }
 
 pub fn map_extension_to_ptype(ext: &str) -> Option<PType> {
-    return match ext {
+    match ext {
         "py" => Some(PType::Python),
         "sh" => Some(PType::Shell),
         "js" => Some(PType::Node),
         "ts" => Some(PType::Node),
         _ => None,
-    };
+    }
 }
 
-pub fn check_package_json(project_root: &PathBuf) -> bool {
+pub fn check_package_json(project_root: &Path) -> bool {
     let package_json = project_root.join("package.json");
     if package_json.exists() {
         return true;
@@ -50,7 +52,7 @@ pub fn check_package_json(project_root: &PathBuf) -> bool {
     false
 }
 
-pub fn check_requirements_txt(project_root: &PathBuf) -> bool {
+pub fn check_requirements_txt(project_root: &Path) -> bool {
     let requirements_txt = project_root.join("requirements.txt");
     if requirements_txt.exists() {
         return true;

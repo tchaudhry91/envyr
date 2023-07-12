@@ -3,7 +3,7 @@ use anyhow::Result;
 use clap::ValueEnum;
 use pathdiff::diff_paths;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use walkdir::{DirEntry, WalkDir};
 
 #[derive(Debug, Default, Clone, ValueEnum, Serialize, Deserialize)]
@@ -68,7 +68,7 @@ impl PackBuilder {
             ));
         }
         if self.entrypoint.is_none() {
-            if self.executables.len() < 1 {
+            if self.executables.is_empty() {
                 return Err(anyhow::anyhow!(
                     "Could not detect project entrypoint. Please specify it manually."
                 ));
@@ -96,7 +96,7 @@ impl PackBuilder {
     }
 }
 
-fn detect_name(project_root: &PathBuf) -> Option<String> {
+fn detect_name(project_root: &Path) -> Option<String> {
     let name = project_root.file_name()?.to_str()?;
     Some(name.to_string())
 }
@@ -105,10 +105,10 @@ fn is_hidden(entry: &DirEntry) -> bool {
     entry
         .file_name()
         .to_str()
-        .map(|s| s.starts_with("."))
+        .map(|s| s.starts_with('.'))
         .unwrap_or(false)
 }
-fn detect_ptype(project_root: &PathBuf) -> Option<PType> {
+fn detect_ptype(project_root: &Path) -> Option<PType> {
     // Check package.json
     if utils::check_package_json(project_root) {
         return Some(PType::Node);
@@ -121,12 +121,14 @@ fn detect_ptype(project_root: &PathBuf) -> Option<PType> {
 }
 
 fn analyse_project(project_root: &PathBuf) -> Result<PackBuilder> {
-    let mut builder = PackBuilder::default();
+    let mut builder = PackBuilder {
+        name: detect_name(project_root),
+        ..Default::default()
+    };
     // Detect Name
-    builder.name = detect_name(&project_root);
 
     // See if the project type can be ascertained
-    if let Some(ptype) = detect_ptype(&project_root) {
+    if let Some(ptype) = detect_ptype(project_root) {
         builder.ptype = ptype;
     }
 
@@ -141,7 +143,7 @@ fn analyse_project(project_root: &PathBuf) -> Result<PackBuilder> {
                     // Do a series of checks
                     // 1. Check a possible entrypoint
                     if let Some((f, interpreter)) = detect_possible_entrypoint(&entry) {
-                        let relative_path = diff_paths(&f, &project_root).expect(
+                        let relative_path = diff_paths(&f, project_root).expect(
                             "Path Diff Error, this should not happen while walking the dir.",
                         );
                         builder.executables.push((relative_path, interpreter));
@@ -175,29 +177,13 @@ fn detect_possible_entrypoint(entry: &DirEntry) -> Option<(PathBuf, String)> {
 
     // Check if the file has a .py extension
     // and if it has a python main.
-    if entry.path().extension().unwrap_or_default() == "py" {
-        if utils::check_python_main(&entry.path().to_path_buf()).unwrap_or(false) {
-            return Some((
-                entry.path().to_path_buf(),
-                "/usr/bin/env python".to_string(),
-            ));
-        }
+    if entry.path().extension().unwrap_or_default() == "py"
+        && utils::check_python_main(&entry.path().to_path_buf()).unwrap_or(false)
+    {
+        return Some((
+            entry.path().to_path_buf(),
+            "/usr/bin/env python".to_string(),
+        ));
     }
     None
-}
-
-// This is a test that only works locally for now.
-// It is a development convenience. Remove later
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn test_build_package() {
-        let project_root = PathBuf::from("/home/tchaudhr/Workspace/sandbox");
-        let pack = Pack::builder(project_root).unwrap().build().unwrap();
-        assert_eq!(pack.name, "sandbox");
-        assert_eq!(pack.interpreter, "/usr/bin/env python");
-        assert_eq!(pack.entrypoint, "main.py");
-    }
 }
