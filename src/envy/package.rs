@@ -32,6 +32,7 @@ impl Pack {
 
 #[derive(Default)]
 pub struct PackBuilder {
+    project_root: PathBuf,
     name: Option<String>,
     interpreter: Option<String>,
     entrypoint: Option<PathBuf>,
@@ -69,9 +70,15 @@ impl PackBuilder {
         }
         if self.entrypoint.is_none() {
             if self.executables.is_empty() {
-                return Err(anyhow::anyhow!(
-                    "Could not detect project entrypoint. Please specify it manually."
-                ));
+                // Try to deduce based on project type
+                if let Some(entrypoint) = deduce_entrypoint(self.ptype.clone(), &self.project_root)
+                {
+                    self.entrypoint = Some(entrypoint);
+                } else {
+                    return Err(anyhow::anyhow!(
+                        "Could not detect project entrypoint. Please specify it manually."
+                    ));
+                }
             } else if self.executables.len() > 1 {
                 return Err(anyhow::anyhow!(
                     "Multiple entrypoints detected! {:?}. Please choose one manually.",
@@ -83,9 +90,14 @@ impl PackBuilder {
             }
         }
         if self.interpreter.is_none() {
-            return Err(anyhow::anyhow!(
-                "Could not detect project interpreter. Please specify it manually."
-            ));
+            // Attempt to deduce from PType.
+            if let Some(interpreter) = deduce_interpreter(self.ptype.clone()) {
+                self.interpreter = Some(interpreter);
+            } else {
+                return Err(anyhow::anyhow!(
+                    "Could not detect project interpreter. Please specify it manually."
+                ));
+            }
         }
         Ok(Pack {
             name: self.name.unwrap_or_default(),
@@ -108,6 +120,23 @@ fn is_hidden(entry: &DirEntry) -> bool {
         .map(|s| s.starts_with('.'))
         .unwrap_or(false)
 }
+
+fn deduce_entrypoint(ptype: PType, project_root: &Path) -> Option<PathBuf> {
+    match ptype {
+        PType::Node => utils::detect_main_node(project_root),
+        _ => None,
+    }
+}
+
+fn deduce_interpreter(ptype: PType) -> Option<String> {
+    match ptype {
+        PType::Python => Some("/usr/bin/env python".to_string()),
+        PType::Node => Some("/usr/bin/env node".to_string()),
+        PType::Shell => Some("/bin/sh".to_string()),
+        _ => None,
+    }
+}
+
 fn detect_ptype(project_root: &Path) -> Option<PType> {
     // Check package.json
     if utils::check_package_json(project_root) {
@@ -123,6 +152,7 @@ fn detect_ptype(project_root: &Path) -> Option<PType> {
 fn analyse_project(project_root: &PathBuf) -> Result<PackBuilder> {
     let mut builder = PackBuilder {
         name: detect_name(project_root),
+        project_root: project_root.clone(),
         ..Default::default()
     };
     // Detect Name

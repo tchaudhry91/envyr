@@ -7,6 +7,7 @@ use std::{
 };
 
 use anyhow::Result;
+use serde_json::Value;
 
 use super::package::PType;
 
@@ -58,4 +59,23 @@ pub fn check_requirements_txt(project_root: &Path) -> bool {
         return true;
     }
     false
+}
+
+pub fn detect_main_node(project_root: &Path) -> Option<PathBuf> {
+    if !check_package_json(project_root) {
+        return None;
+    }
+    let package_json = std::fs::read_to_string(project_root.join("package.json"));
+    match package_json {
+        Ok(package_json) => {
+            let v = serde_json::from_str(&package_json);
+            if v.is_err() {
+                return None;
+            }
+            let v: Value = v.unwrap();
+            let main = v["main"].as_str()?;
+            Some(PathBuf::from(main))
+        }
+        Err(_) => None,
+    }
 }
