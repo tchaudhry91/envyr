@@ -30,7 +30,7 @@ struct Args {
 fn main() -> Result<()> {
     let args = Args::parse();
     let canon_path = std::fs::canonicalize(&args.project_root)?;
-    let mut pack_builder = envy::package::Pack::builder(canon_path)?;
+    let mut pack_builder = envy::package::Pack::builder(&canon_path)?;
 
     // Overwrite params if needed
     if let Some(name) = args.name {
@@ -51,6 +51,7 @@ fn main() -> Result<()> {
 
     let pack = pack_builder.build()?;
 
-    println!("{}", serde_json::to_string_pretty(&pack)?);
+    let dockerfile = pack.generate_dockerfile(&canon_path)?;
+    println!("{}", dockerfile);
     Ok(())
 }

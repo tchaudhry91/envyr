@@ -1,6 +1,7 @@
-use super::utils;
+use super::{templates::TEMPLATE_DOCKERFILE, utils};
 use anyhow::Result;
 use clap::ValueEnum;
+use handlebars::Handlebars;
 use pathdiff::diff_paths;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -21,12 +22,52 @@ pub struct Pack {
     pub name: String,
     pub interpreter: String,
     pub ptype: PType,
+    pub deps: Vec<String>,
     pub entrypoint: PathBuf,
 }
 impl Pack {
-    pub fn builder(project_root: PathBuf) -> Result<PackBuilder> {
-        let builder = analyse_project(&project_root)?;
+    pub fn builder(project_root: &PathBuf) -> Result<PackBuilder> {
+        let builder = analyse_project(project_root)?;
         Ok(builder)
+    }
+
+    pub fn generate_dockerfile(self, project_root: &Path) -> Result<String> {
+        let mut handlebars = Handlebars::new();
+        let source = TEMPLATE_DOCKERFILE;
+        handlebars.register_template_string("Dockerfile", source)?;
+
+        #[derive(Default, Serialize, Deserialize)]
+        struct Data {
+            interpreter: String,
+            entrypoint: String,
+            os_deps: Vec<String>,
+            ptype: PType,
+            type_reqs: bool,
+        }
+
+        // trim env prefix on interpreter
+        let interpreter = self.interpreter.trim_start_matches("/usr/bin/env ");
+
+        let mut d = Data {
+            interpreter: interpreter.to_string(),
+            entrypoint: self.entrypoint.to_str().unwrap().to_string(),
+            os_deps: self.deps,
+            ptype: self.ptype,
+            type_reqs: false,
+        };
+
+        // Figure out type specific deps
+        match d.ptype {
+            PType::Python => {
+                d.type_reqs = utils::check_requirements_txt(project_root);
+            }
+            PType::Node => {
+                d.type_reqs = utils::check_package_json(project_root);
+            }
+            _ => {}
+        };
+
+        Ok(handlebars.render("Dockerfile", &d)?)
     }
 }
 
@@ -104,6 +145,7 @@ impl PackBuilder {
             interpreter: self.interpreter.unwrap_or_default(),
             entrypoint: self.entrypoint.unwrap_or_default(),
             ptype: self.ptype,
+            deps: vec!["curl".to_string(), "git".to_string()],
         })
     }
 }
@@ -118,6 +160,14 @@ fn is_hidden(entry: &DirEntry) -> bool {
         .file_name()
         .to_str()
         .map(|s| s.starts_with('.'))
+        .unwrap_or(false)
+}
+
+fn ignore_dir(entry: &DirEntry) -> bool {
+    entry
+        .file_name()
+        .to_str()
+        .map(|s| s.starts_with("node_modules") || s.starts_with("__pycache__"))
         .unwrap_or(false)
 }
 
@@ -165,7 +215,7 @@ fn analyse_project(project_root: &PathBuf) -> Result<PackBuilder> {
     // Walk the project directory
     for entry in WalkDir::new(project_root)
         .into_iter()
-        .filter_entry(|e| !is_hidden(e))
+        .filter_entry(|e| !(is_hidden(e) || ignore_dir(e)))
     {
         match entry {
             Ok(entry) => {
@@ -179,8 +229,11 @@ fn analyse_project(project_root: &PathBuf) -> Result<PackBuilder> {
                         builder.executables.push((relative_path, interpreter));
                     }
                     // 2. Check the file extensions and update ptype if necessary
-                    if let Some(ptype) = detect_ptype_from_extension(&entry) {
-                        builder.ptype = ptype;
+                    // Only do this if the ptype isn't already detected via other methods.
+                    if matches!(builder.ptype, PType::Other) {
+                        if let Some(ptype) = detect_ptype_from_extension(&entry) {
+                            builder.ptype = ptype;
+                        }
                     }
                 }
             }
