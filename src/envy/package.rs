@@ -1,7 +1,6 @@
-use super::{templates::TEMPLATE_DOCKERFILE, utils};
+use super::utils;
 use anyhow::Result;
 use clap::ValueEnum;
-use handlebars::Handlebars;
 use pathdiff::diff_paths;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -26,48 +25,16 @@ pub struct Pack {
     pub entrypoint: PathBuf,
 }
 impl Pack {
+    pub fn load(project_root: &Path) -> Result<Self> {
+        let meta_file = project_root.join(".envy").join("meta.json");
+        let meta_json = std::fs::read_to_string(meta_file)?;
+        let pack: Pack = serde_json::from_str(&meta_json)?;
+        Ok(pack)
+    }
+
     pub fn builder(project_root: &PathBuf) -> Result<PackBuilder> {
         let builder = analyse_project(project_root)?;
         Ok(builder)
-    }
-
-    pub fn generate_dockerfile(self, project_root: &Path) -> Result<String> {
-        let mut handlebars = Handlebars::new();
-        let source = TEMPLATE_DOCKERFILE;
-        handlebars.register_template_string("Dockerfile", source)?;
-
-        #[derive(Default, Serialize, Deserialize)]
-        struct Data {
-            interpreter: String,
-            entrypoint: String,
-            os_deps: Vec<String>,
-            ptype: PType,
-            type_reqs: bool,
-        }
-
-        // trim env prefix on interpreter
-        let interpreter = self.interpreter.trim_start_matches("/usr/bin/env ");
-
-        let mut d = Data {
-            interpreter: interpreter.to_string(),
-            entrypoint: self.entrypoint.to_str().unwrap().to_string(),
-            os_deps: self.deps,
-            ptype: self.ptype,
-            type_reqs: false,
-        };
-
-        // Figure out type specific deps
-        match d.ptype {
-            PType::Python => {
-                d.type_reqs = utils::check_requirements_txt(project_root);
-            }
-            PType::Node => {
-                d.type_reqs = utils::check_package_json(project_root);
-            }
-            _ => {}
-        };
-
-        Ok(handlebars.render("Dockerfile", &d)?)
     }
 }
 
@@ -205,7 +172,6 @@ fn analyse_project(project_root: &PathBuf) -> Result<PackBuilder> {
         project_root: project_root.clone(),
         ..Default::default()
     };
-    // Detect Name
 
     // See if the project type can be ascertained
     if let Some(ptype) = detect_ptype(project_root) {
