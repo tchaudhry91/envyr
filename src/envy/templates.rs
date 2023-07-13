@@ -1,15 +1,25 @@
 pub static TEMPLATE_DOCKERFILE: &str = r#"
+# Envy Base
 {{#if (eq ptype "Python")}}
 FROM python:alpine
-{{/if}}
+{{else}}
 {{#if (eq ptype "Node")}}
 FROM node:alpine
+{{else}}
+FROM alpine
 {{/if}}
-RUN apk add --no-cache ca-certificates
+{{/if}}
+
+# Base Deps
+RUN apk add --no-cache ca-certificates bash
+
+# Os Level Deps if any
 {{#if os_deps}}
 RUN apk add --no-cache {{#each os_deps}} {{this}} {{/each}}
 {{/if}}
+
 WORKDIR /app
+# Install Type Specific Deps
 {{#if type_reqs}}
 {{#if (eq ptype "Python")}}
 ADD ./requirements.txt /app/requirements.txt
@@ -20,6 +30,7 @@ ADD ./package.json /app/package.json
 RUN npm install
 {{/if}}
 {{/if}}
+
 ADD . /app
 ENTRYPOINT ["{{interpreter}}", "{{entrypoint}}"]
 "#;

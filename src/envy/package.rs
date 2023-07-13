@@ -145,7 +145,7 @@ impl PackBuilder {
             interpreter: self.interpreter.unwrap_or_default(),
             entrypoint: self.entrypoint.unwrap_or_default(),
             ptype: self.ptype,
-            deps: vec!["curl".to_string(), "git".to_string()],
+            deps: vec![],
         })
     }
 }
