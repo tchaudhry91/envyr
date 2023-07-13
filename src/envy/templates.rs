@@ -1,5 +1,10 @@
 pub static TEMPLATE_DOCKERFILE: &str = r#"
+{{#if (eq ptype "Python")}}
 FROM python:alpine
+{{/if}}
+{{#if (eq ptype "Node")}}
+FROM node:alpine
+{{/if}}
 RUN apk add --no-cache ca-certificates
 {{#if os_deps}}
 RUN apk add --no-cache {{#each os_deps}} {{this}} {{/each}}
