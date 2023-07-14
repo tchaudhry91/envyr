@@ -2,6 +2,8 @@ use std::path::Path;
 
 use anyhow::Result;
 use handlebars::Handlebars;
+use log::debug;
+use log::log_enabled;
 use serde::Deserialize;
 use serde::Serialize;
 use subprocess::{Popen, PopenConfig};
@@ -46,10 +48,18 @@ pub fn get_docker_executor() -> Result<String> {
     Err(anyhow::anyhow!("Docker or Podman not found."))
 }
 
-pub fn run(project_root: &Path, args: Vec<String>) -> Result<()> {
+pub fn run(project_root: &Path, fs_map: Vec<String>, args: Vec<String>) -> Result<()> {
     let executor = get_docker_executor()?;
     let image = build_local(project_root)?;
-    let command = format!("{} run -it --rm {} {}", executor, image, args.join(" "));
+
+    let command = format!(
+        "{} run -it {} --rm {} {}",
+        executor,
+        get_fs_map_str(fs_map),
+        image,
+        args.join(" ")
+    );
+    debug!("Running command: {}", command);
     let mut p = Popen::create(
         command.split_whitespace().collect::<Vec<&str>>().as_slice(),
         PopenConfig::default(),
@@ -58,11 +68,29 @@ pub fn run(project_root: &Path, args: Vec<String>) -> Result<()> {
     Ok(())
 }
 
+fn get_fs_map_str(fs_map: Vec<String>) -> String {
+    if fs_map.is_empty() {
+        return "".to_string();
+    }
+    let fs_map_string = String::from("-v");
+    format!("{} {}", fs_map_string, fs_map.join(" -v "))
+}
+
 pub fn build_local(project_root: &Path) -> Result<String> {
     let executor = get_docker_executor()?;
     let pack = super::package::Pack::load(project_root)?;
     let image = format!("envy-{}:latest", pack.name);
     let dockerfile_path = project_root.join(".envy").join("Dockerfile");
+    debug!("Building local docker image: {}", image);
+    let mut popen_conf = PopenConfig {
+        stdout: subprocess::Redirection::Pipe,
+        stderr: subprocess::Redirection::Pipe,
+        ..Default::default()
+    };
+    if log_enabled!(log::Level::Debug) {
+        // This prints all logs
+        popen_conf = PopenConfig::default();
+    }
     let mut p = Popen::create(
         &[
             executor.as_str(),
@@ -73,11 +101,7 @@ pub fn build_local(project_root: &Path) -> Result<String> {
             dockerfile_path.to_str().unwrap(),
             project_root.to_str().unwrap(),
         ],
-        PopenConfig {
-            stdout: subprocess::Redirection::Pipe,
-            stderr: subprocess::Redirection::Pipe,
-            ..Default::default()
-        },
+        popen_conf,
     )?;
     let status = p.wait_timeout(std::time::Duration::from_secs(300))?;
 
@@ -86,10 +110,10 @@ pub fn build_local(project_root: &Path) -> Result<String> {
             if s.success() {
                 Ok(image)
             } else {
-                Err(anyhow::anyhow!("Failed to build image."))
+                Err(anyhow::anyhow!("Failed to build docker image."))
             }
         }
-        None => Err(anyhow::anyhow!("Failed to build image.")),
+        None => Err(anyhow::anyhow!("Failed to build docker image.")),
     }
 }
 
@@ -147,4 +171,17 @@ pub fn generate_docker_ignore(pack: &Pack) -> Result<String> {
     };
 
     Ok(handlebars.render("dockerignore", &d)?)
+}
+
+#[cfg(test)]
+mod tests {
+
+    #[test]
+    fn test_docker_volumes_map() {
+        let input = vec!["/root:/root".to_string()];
+        assert_eq!(super::get_fs_map_str(input), "-v /root:/root");
+
+        let input = vec!["/root:/root".to_string(), ".app:/app".to_string()];
+        assert_eq!(super::get_fs_map_str(input), "-v /root:/root -v .app:/app");
+    }
 }

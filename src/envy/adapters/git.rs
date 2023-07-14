@@ -2,6 +2,7 @@
 
 use super::fetcher::Fetcher;
 use anyhow::{anyhow, Result};
+use log::debug;
 use std::path::PathBuf;
 
 pub struct GitFetcher {
@@ -18,10 +19,16 @@ impl GitFetcher {
 }
 
 impl Fetcher for GitFetcher {
-    fn fetch(&self, url: &str) -> Result<PathBuf> {
+    fn fetch(&self, url: &str, refresh: bool) -> Result<PathBuf> {
         let path = self.storage_dir_root.clone().join(get_storage_path(url)?);
         // Pull instead of clone if the repo already exists
         if path.exists() {
+            debug!("Clone already exists: {:?}", path);
+            if !refresh {
+                debug!("Skipping refresh. Returning existing path.");
+                return Ok(path);
+            }
+            debug!("Performing pull in existing clone.");
             let status = std::process::Command::new("git")
                 .arg("pull")
                 .current_dir(&path)
@@ -35,6 +42,8 @@ impl Fetcher for GitFetcher {
             Ok(path)
         } else {
             // Create basedir if it doesn't exist
+            //
+            debug!("Cloning git repository: {:?}", path);
             let base_dir = path.parent();
             match base_dir {
                 Some(dir) => {

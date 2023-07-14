@@ -34,6 +34,13 @@ struct GlobalOpts {
         default_value_t = false
     )]
     verbose: bool,
+
+    #[clap(
+        long,
+        default_value_t = false,
+        help = "refresh code cache before running."
+    )]
+    refresh: bool,
 }
 
 #[derive(Debug, Args)]
@@ -67,12 +74,17 @@ enum Command {
     Run {
         #[clap(long, short, value_enum, default_value_t = envy::meta::Executors::Docker)]
         executor: envy::meta::Executors,
+
         #[clap(
             long,
             default_value_t = false,
             help = "Attempt to automatically generate the package metadata before running. This overwrites existing metadata."
         )]
         autogen: bool,
+
+        #[clap(long, num_args = 0.., help ="Mount the given directory as a volume. Format: host_dir:container_dir. Allows multiples. Only applicable on Docker Executor.")]
+        fs_map: Vec<String>,
+
         #[clap(raw = true)]
         args: Vec<String>,
     },
@@ -111,9 +123,10 @@ fn main() -> Result<()> {
     // TODO: Make this configurable later
     let homedir = home::home_dir().unwrap();
     let storage_root = homedir.join(".envy");
+
     let p_fetcher = fetcher::get_fetcher(args.project_root.as_str(), storage_root)?;
 
-    let mut path = p_fetcher.fetch(args.project_root.as_str())?;
+    let mut path = p_fetcher.fetch(args.project_root.as_str(), args.refresh)?;
 
     if args.sub_dir.is_some() {
         path = path.join(args.sub_dir.unwrap());
@@ -130,19 +143,26 @@ fn main() -> Result<()> {
             executor,
             autogen,
             args,
+            fs_map,
         } => {
             debug!(
-                "Running {:?} executor with autogen={} and args: {:?}",
-                executor, autogen, args
+                "Running {:?} executor with autogen={}, fs_map:{:?} and args: {:?}",
+                executor, autogen, fs_map, args
             );
-            run(canon_path, executor, autogen, args)?;
+            run(canon_path, executor, autogen, fs_map, args)?;
         }
     }
 
     Ok(())
 }
 
-fn run(canon_path: PathBuf, executor: Executors, autogen: bool, args: Vec<String>) -> Result<()> {
+fn run(
+    canon_path: PathBuf,
+    executor: Executors,
+    autogen: bool,
+    fs_map: Vec<String>,
+    args: Vec<String>,
+) -> Result<()> {
     if autogen {
         let pack_builder = envy::package::Pack::builder(&canon_path)?;
         let pack = pack_builder.build()?;
@@ -151,7 +171,7 @@ fn run(canon_path: PathBuf, executor: Executors, autogen: bool, args: Vec<String
     }
     match executor {
         envy::meta::Executors::Docker => {
-            envy::docker::run(&canon_path, args)?;
+            envy::docker::run(&canon_path, fs_map, args)?;
         }
         envy::meta::Executors::Nix => todo!(),
         envy::meta::Executors::Native => todo!(),
