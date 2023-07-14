@@ -14,7 +14,8 @@ use super::package::PType;
 // Checks if the file contains a python main.
 pub fn check_python_main(f: &PathBuf) -> Result<bool> {
     let code = std::fs::read_to_string(f)?;
-    if code.contains("if __name__ == \"__main__\":") {
+    if code.contains("if __name__ == \"__main__\":") || code.contains("if __name__ == '__main__':")
+    {
         return Ok(true);
     }
     Ok(false)

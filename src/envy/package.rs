@@ -44,7 +44,7 @@ pub struct PackBuilder {
     name: Option<String>,
     interpreter: Option<String>,
     entrypoint: Option<PathBuf>,
-    executables: Vec<(PathBuf, String)>,
+    executables: Vec<(PathBuf, String, u8)>,
     ptype: PType,
 }
 
@@ -88,11 +88,21 @@ impl PackBuilder {
                     ));
                 }
             } else if self.executables.len() > 1 {
-                return Err(anyhow::anyhow!(
-                    "Multiple entrypoints detected! {:?}. Please choose one manually.",
-                    self.executables
-                ));
+                // Get the lowest priority one
+                self.executables.sort_by(|a, b| a.2.cmp(&b.2));
+                // If multiple files with lowest priority are found then error out.
+                if self.executables[0].2 == self.executables[1].2 {
+                    return Err(anyhow::anyhow!(
+                        "Multiple entrypoints detected! {:?}. Please choose one manually.",
+                        self.executables
+                    ));
+                } else {
+                    // Otherwise use the lowest priority one.
+                    self.entrypoint = Some(self.executables[0].0.clone());
+                    self.interpreter = Some(self.executables[0].1.clone());
+                }
             } else {
+                // Only one executable found.
                 self.entrypoint = Some(self.executables[0].0.clone());
                 self.interpreter = Some(self.executables[0].1.clone());
             }
@@ -188,11 +198,13 @@ fn analyse_project(project_root: &PathBuf) -> Result<PackBuilder> {
                 if entry.file_type().is_file() {
                     // Do a series of checks
                     // 1. Check a possible entrypoint
-                    if let Some((f, interpreter)) = detect_possible_entrypoint(&entry) {
+                    if let Some((f, interpreter, priority)) = detect_possible_entrypoint(&entry) {
                         let relative_path = diff_paths(&f, project_root).expect(
                             "Path Diff Error, this should not happen while walking the dir.",
                         );
-                        builder.executables.push((relative_path, interpreter));
+                        builder
+                            .executables
+                            .push((relative_path, interpreter, priority));
                     }
                     // 2. Check the file extensions and update ptype if necessary
                     // Only do this if the ptype isn't already detected via other methods.
@@ -217,22 +229,25 @@ fn detect_ptype_from_extension(entry: &DirEntry) -> Option<PType> {
     utils::map_extension_to_ptype(extension)
 }
 
-fn detect_possible_entrypoint(entry: &DirEntry) -> Option<(PathBuf, String)> {
-    if let Some(interpreter) =
-        utils::check_shebang_file(&entry.path().to_path_buf()).unwrap_or(None)
-    {
-        return Some((entry.path().to_path_buf(), interpreter));
-    }
-
+fn detect_possible_entrypoint(entry: &DirEntry) -> Option<(PathBuf, String, u8)> {
     // Check if the file has a .py extension
     // and if it has a python main.
+    // This is a higher priority return than the shebang.
     if entry.path().extension().unwrap_or_default() == "py"
         && utils::check_python_main(&entry.path().to_path_buf()).unwrap_or(false)
     {
         return Some((
             entry.path().to_path_buf(),
             "/usr/bin/env python".to_string(),
+            0_u8,
         ));
     }
+
+    if let Some(interpreter) =
+        utils::check_shebang_file(&entry.path().to_path_buf()).unwrap_or(None)
+    {
+        return Some((entry.path().to_path_buf(), interpreter, 1_u8));
+    }
+
     None
 }

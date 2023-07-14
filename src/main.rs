@@ -2,7 +2,7 @@ mod envy;
 
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
-use envy::adapters::fetcher;
+use envy::{adapters::fetcher, meta::Executors};
 use std::path::PathBuf;
 
 #[derive(Debug, Args)]
@@ -84,7 +84,9 @@ pub struct App {
 fn main() -> Result<()> {
     let app = App::parse();
     let args = app.args;
-    let storage_root = std::fs::canonicalize("/home/tchaudhry/.envy")?;
+    // TODO: Make this configurable later
+    let homedir = home::home_dir().unwrap();
+    let storage_root = homedir.join(".envy");
     let p_fetcher = fetcher::get_fetcher(args.project_root.as_str(), storage_root)?;
 
     let mut path = p_fetcher.fetch(args.project_root.as_str())?;
@@ -97,49 +99,59 @@ fn main() -> Result<()> {
 
     match app.command {
         Command::Generate { args } => {
-            let mut pack_builder = envy::package::Pack::builder(&canon_path)?;
-
-            // Overwrite global opts if needed
-            if let Some(name) = args.name {
-                pack_builder = pack_builder.name(name);
-            }
-
-            if let Some(interpreter) = args.interpreter {
-                pack_builder = pack_builder.interpreter(interpreter);
-            }
-
-            if let Some(entrypoint) = args.entrypoint {
-                pack_builder = pack_builder.entrypoint(entrypoint);
-            }
-
-            if let Some(ptype) = args.ptype {
-                pack_builder = pack_builder.ptype(ptype);
-            }
-
-            let pack = pack_builder.build()?;
-            let generator = envy::meta::Generator::new(pack);
-            generator.generate(&canon_path)?;
+            generate(canon_path, args)?;
         }
         Command::Run {
             executor,
             autogen,
             args,
         } => {
-            if autogen {
-                let pack_builder = envy::package::Pack::builder(&canon_path)?;
-                let pack = pack_builder.build()?;
-                let generator = envy::meta::Generator::new(pack);
-                generator.generate(&canon_path)?;
-            }
-            match executor {
-                envy::meta::Executors::Docker => {
-                    envy::docker::run(&canon_path, args)?;
-                }
-                envy::meta::Executors::Nix => todo!(),
-                envy::meta::Executors::Native => todo!(),
-            }
+            run(canon_path, executor, autogen, args)?;
         }
     }
 
+    Ok(())
+}
+
+fn run(canon_path: PathBuf, executor: Executors, autogen: bool, args: Vec<String>) -> Result<()> {
+    if autogen {
+        let pack_builder = envy::package::Pack::builder(&canon_path)?;
+        let pack = pack_builder.build()?;
+        let generator = envy::meta::Generator::new(pack);
+        generator.generate(&canon_path)?;
+    }
+    match executor {
+        envy::meta::Executors::Docker => {
+            envy::docker::run(&canon_path, args)?;
+        }
+        envy::meta::Executors::Nix => todo!(),
+        envy::meta::Executors::Native => todo!(),
+    }
+    Ok(())
+}
+
+fn generate(canon_path: PathBuf, args: GenerateOpts) -> Result<()> {
+    let mut pack_builder = envy::package::Pack::builder(&canon_path)?;
+
+    // Overwrite global opts if needed
+    if let Some(name) = args.name {
+        pack_builder = pack_builder.name(name);
+    }
+
+    if let Some(interpreter) = args.interpreter {
+        pack_builder = pack_builder.interpreter(interpreter);
+    }
+
+    if let Some(entrypoint) = args.entrypoint {
+        pack_builder = pack_builder.entrypoint(entrypoint);
+    }
+
+    if let Some(ptype) = args.ptype {
+        pack_builder = pack_builder.ptype(ptype);
+    }
+
+    let pack = pack_builder.build()?;
+    let generator = envy::meta::Generator::new(pack);
+    generator.generate(&canon_path)?;
     Ok(())
 }
