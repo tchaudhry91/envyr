@@ -38,8 +38,8 @@ ENTRYPOINT ["{{interpreter}}", "{{entrypoint}}"]
 // To-Do
 // Make modular per ptype later.
 pub static DOCKER_IGNORE: &str = r#"
-.git
-.gitignore
-node_modules
+**/.git
+**/.gitignore
+**/node_modules
 *.pyc
 "#;

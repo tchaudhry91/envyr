@@ -27,7 +27,7 @@ impl Generator {
         let dockerfile = docker::generate_dockerfile(&self.pack, project_root)?;
         let dockerignore = docker::generate_docker_ignore(&self.pack)?;
         let dockerfile_path = project_root.join(".envy").join("Dockerfile");
-        let dockerignore_path = project_root.join(".envy").join(".dockerignore");
+        let dockerignore_path = project_root.join(".dockerignore");
         std::fs::write(dockerfile_path, dockerfile)?;
         std::fs::write(dockerignore_path, dockerignore)?;
         Ok(())

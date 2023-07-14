@@ -3,6 +3,7 @@ mod envy;
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 use envy::{adapters::fetcher, meta::Executors};
+use log::debug;
 use std::path::PathBuf;
 
 #[derive(Debug, Args)]
@@ -24,6 +25,15 @@ struct GlobalOpts {
         global = true
     )]
     sub_dir: Option<String>,
+
+    #[arg(
+        long,
+        short,
+        help = "Emit Envy logs to stdout. Useful for debugging. But may spoil pipes.",
+        global = true,
+        default_value_t = false
+    )]
+    verbose: bool,
 }
 
 #[derive(Debug, Args)]
@@ -83,6 +93,20 @@ pub struct App {
 
 fn main() -> Result<()> {
     let app = App::parse();
+
+    let mut log_level = log::LevelFilter::Error;
+
+    if app.args.verbose {
+        log_level = log::LevelFilter::Debug;
+    }
+    simplelog::TermLogger::init(
+        log_level,
+        simplelog::Config::default(),
+        simplelog::TerminalMode::Mixed,
+        simplelog::ColorChoice::Auto,
+    )?;
+
+    debug!("Started Envy: Parsed args: {:?}", app.args);
     let args = app.args;
     // TODO: Make this configurable later
     let homedir = home::home_dir().unwrap();
@@ -99,6 +123,7 @@ fn main() -> Result<()> {
 
     match app.command {
         Command::Generate { args } => {
+            debug!("Running Generator with args: {:?}", args);
             generate(canon_path, args)?;
         }
         Command::Run {
@@ -106,6 +131,10 @@ fn main() -> Result<()> {
             autogen,
             args,
         } => {
+            debug!(
+                "Running {:?} executor with autogen={} and args: {:?}",
+                executor, autogen, args
+            );
             run(canon_path, executor, autogen, args)?;
         }
     }

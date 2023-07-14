@@ -1,6 +1,7 @@
 use super::utils;
 use anyhow::Result;
 use clap::ValueEnum;
+use log::debug;
 use pathdiff::diff_paths;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
@@ -38,7 +39,7 @@ impl Pack {
     }
 }
 
-#[derive(Default)]
+#[derive(Default, Debug)]
 pub struct PackBuilder {
     project_root: PathBuf,
     name: Option<String>,
@@ -81,6 +82,7 @@ impl PackBuilder {
                 // Try to deduce based on project type
                 if let Some(entrypoint) = deduce_entrypoint(self.ptype.clone(), &self.project_root)
                 {
+                    debug!("Deduced entrypoint based on project type: {:?}", entrypoint);
                     self.entrypoint = Some(entrypoint);
                 } else {
                     return Err(anyhow::anyhow!(
@@ -88,6 +90,7 @@ impl PackBuilder {
                     ));
                 }
             } else if self.executables.len() > 1 {
+                debug!("Multiple executables found, trying lowest priority one.");
                 // Get the lowest priority one
                 self.executables.sort_by(|a, b| a.2.cmp(&b.2));
                 // If multiple files with lowest priority are found then error out.
@@ -106,10 +109,16 @@ impl PackBuilder {
                 self.entrypoint = Some(self.executables[0].0.clone());
                 self.interpreter = Some(self.executables[0].1.clone());
             }
+            debug!("Deduced entrypoint: {:?}", self.entrypoint);
+            debug!("Deduced interpreter: {:?}", self.interpreter);
         }
         if self.interpreter.is_none() {
             // Attempt to deduce from PType.
             if let Some(interpreter) = deduce_interpreter(self.ptype.clone()) {
+                debug!(
+                    "Deduced interpreter based on project type: {:?}",
+                    interpreter
+                );
                 self.interpreter = Some(interpreter);
             } else {
                 return Err(anyhow::anyhow!(
@@ -221,6 +230,7 @@ fn analyse_project(project_root: &PathBuf) -> Result<PackBuilder> {
         }
     }
 
+    debug!("Project analysis result: {:?}", builder);
     Ok(builder)
 }
 
