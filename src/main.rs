@@ -2,13 +2,28 @@ mod envy;
 
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
+use envy::adapters::fetcher;
 use std::path::PathBuf;
 
 #[derive(Debug, Args)]
 struct GlobalOpts {
     // Project Root
-    #[arg(long, short, global = true, default_value_os_t = PathBuf::from("."))]
-    project_root: PathBuf,
+    #[arg(
+        long,
+        short,
+        help = "Project location. Currently Supported git repositories and local directories.",
+        global = true,
+        default_value = "."
+    )]
+    project_root: String,
+
+    #[arg(
+        long,
+        short,
+        help = "relative sub-directory to the project_root, useful if you're working with monorepos.",
+        global = true
+    )]
+    sub_dir: Option<String>,
 }
 
 #[derive(Debug, Args)]
@@ -42,6 +57,12 @@ enum Command {
     Run {
         #[clap(long, short, value_enum, default_value_t = envy::meta::Executors::Docker)]
         executor: envy::meta::Executors,
+        #[clap(
+            long,
+            default_value_t = false,
+            help = "Attempt to automatically generate the package metadata before running. This overwrites existing metadata."
+        )]
+        autogen: bool,
         #[clap(raw = true)]
         args: Vec<String>,
     },
@@ -63,7 +84,16 @@ pub struct App {
 fn main() -> Result<()> {
     let app = App::parse();
     let args = app.args;
-    let canon_path = std::fs::canonicalize(args.project_root)?;
+    let storage_root = std::fs::canonicalize("/home/tchaudhry/.envy")?;
+    let p_fetcher = fetcher::get_fetcher(args.project_root.as_str(), storage_root)?;
+
+    let mut path = p_fetcher.fetch(args.project_root.as_str())?;
+
+    if args.sub_dir.is_some() {
+        path = path.join(args.sub_dir.unwrap());
+    }
+
+    let canon_path = std::fs::canonicalize(path)?;
 
     match app.command {
         Command::Generate { args } => {
@@ -90,13 +120,25 @@ fn main() -> Result<()> {
             let generator = envy::meta::Generator::new(pack);
             generator.generate(&canon_path)?;
         }
-        Command::Run { executor, args } => match executor {
-            envy::meta::Executors::Docker => {
-                envy::docker::run(&canon_path, args)?;
+        Command::Run {
+            executor,
+            autogen,
+            args,
+        } => {
+            if autogen {
+                let pack_builder = envy::package::Pack::builder(&canon_path)?;
+                let pack = pack_builder.build()?;
+                let generator = envy::meta::Generator::new(pack);
+                generator.generate(&canon_path)?;
             }
-            envy::meta::Executors::Nix => todo!(),
-            envy::meta::Executors::Native => todo!(),
-        },
+            match executor {
+                envy::meta::Executors::Docker => {
+                    envy::docker::run(&canon_path, args)?;
+                }
+                envy::meta::Executors::Nix => todo!(),
+                envy::meta::Executors::Native => todo!(),
+            }
+        }
     }
 
     Ok(())
