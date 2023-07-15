@@ -79,7 +79,7 @@ fn get_fs_map_str(fs_map: Vec<String>) -> String {
 pub fn build_local(project_root: &Path) -> Result<String> {
     let executor = get_docker_executor()?;
     let pack = super::package::Pack::load(project_root)?;
-    let image = format!("envy-{}:latest", pack.name);
+    let image = format!("envy-{}:latest", pack.name.to_lowercase());
     let dockerfile_path = project_root.join(".envy").join("Dockerfile");
     debug!("Building local docker image: {}", image);
     let mut popen_conf = PopenConfig {
