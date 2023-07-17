@@ -44,14 +44,14 @@ struct GlobalOpts {
 }
 
 #[derive(Debug, Args)]
-struct GenerateOpts {
+struct OverrideOpts {
     #[arg(long, short)]
     name: Option<String>,
 
     #[arg(long, short)]
     interpreter: Option<String>,
 
-    #[arg(long, short)]
+    #[arg(long, short = 'x')]
     entrypoint: Option<PathBuf>,
 
     #[arg(long = "type", short = 't', value_enum)]
@@ -67,7 +67,7 @@ enum Command {
     )]
     Generate {
         #[clap(flatten)]
-        args: GenerateOpts,
+        args: OverrideOpts,
     },
 
     #[clap(name = "run", about = "Run the package with the given executor.")]
@@ -84,6 +84,9 @@ enum Command {
 
         #[clap(long, num_args = 0.., help ="Mount the given directory as a volume. Format: host_dir:container_dir. Allows multiples. Only applicable on Docker Executor.")]
         fs_map: Vec<String>,
+
+        #[clap(flatten)]
+        overrides: OverrideOpts,
 
         #[clap(raw = true)]
         args: Vec<String>,
@@ -141,15 +144,16 @@ fn main() -> Result<()> {
         }
         Command::Run {
             executor,
+            overrides,
             autogen,
             args,
             fs_map,
         } => {
             debug!(
-                "Running {:?} executor with autogen={}, fs_map:{:?} and args: {:?}",
-                executor, autogen, fs_map, args
+                "Running {:?} executor with autogen={}, fs_map:{:?}, overrides:{:?} and args: {:?}",
+                executor, autogen, fs_map, overrides, args
             );
-            run(canon_path, executor, autogen, fs_map, args)?;
+            run(canon_path, executor, autogen, fs_map, overrides, args)?;
         }
     }
 
@@ -161,10 +165,12 @@ fn run(
     executor: Executors,
     autogen: bool,
     fs_map: Vec<String>,
+    overrides: OverrideOpts,
     args: Vec<String>,
 ) -> Result<()> {
     if autogen {
         let pack_builder = envy::package::Pack::builder(&canon_path)?;
+        let pack_builder = override_builder_opts(overrides, pack_builder);
         let pack = pack_builder.build()?;
         let generator = envy::meta::Generator::new(pack);
         generator.generate(&canon_path)?;
@@ -179,9 +185,19 @@ fn run(
     Ok(())
 }
 
-fn generate(canon_path: PathBuf, args: GenerateOpts) -> Result<()> {
-    let mut pack_builder = envy::package::Pack::builder(&canon_path)?;
+fn generate(canon_path: PathBuf, args: OverrideOpts) -> Result<()> {
+    let pack_builder = envy::package::Pack::builder(&canon_path)?;
+    let pack_builder = override_builder_opts(args, pack_builder);
+    let pack = pack_builder.build()?;
+    let generator = envy::meta::Generator::new(pack);
+    generator.generate(&canon_path)?;
+    Ok(())
+}
 
+fn override_builder_opts(
+    args: OverrideOpts,
+    mut pack_builder: envy::package::PackBuilder,
+) -> envy::package::PackBuilder {
     // Overwrite global opts if needed
     if let Some(name) = args.name {
         pack_builder = pack_builder.name(name);
@@ -198,9 +214,5 @@ fn generate(canon_path: PathBuf, args: GenerateOpts) -> Result<()> {
     if let Some(ptype) = args.ptype {
         pack_builder = pack_builder.ptype(ptype);
     }
-
-    let pack = pack_builder.build()?;
-    let generator = envy::meta::Generator::new(pack);
-    generator.generate(&canon_path)?;
-    Ok(())
+    pack_builder
 }
