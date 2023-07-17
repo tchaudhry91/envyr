@@ -8,16 +8,6 @@ use std::path::PathBuf;
 
 #[derive(Debug, Args)]
 struct GlobalOpts {
-    // Project Root
-    #[arg(
-        long,
-        short,
-        help = "Project location. Currently Supported git repositories and local directories.",
-        global = true,
-        default_value = "."
-    )]
-    project_root: String,
-
     #[arg(
         long,
         short,
@@ -104,6 +94,12 @@ pub struct App {
 
     #[clap(subcommand)]
     command: Command,
+
+    #[clap(
+        help = "The location to the project. Accepts, local filesystem path/git repos.",
+        index = 1
+    )]
+    project_root: String,
 }
 
 fn main() -> Result<()> {
@@ -123,13 +119,14 @@ fn main() -> Result<()> {
 
     debug!("Started Envy: Parsed args: {:?}", app.args);
     let args = app.args;
+    let project_root = app.project_root;
     // TODO: Make this configurable later
     let homedir = home::home_dir().unwrap();
-    let storage_root = homedir.join(".envy");
+    let envy_root = homedir.join(".envy");
 
-    let p_fetcher = fetcher::get_fetcher(args.project_root.as_str(), storage_root)?;
+    let p_fetcher = fetcher::get_fetcher(project_root.as_str(), envy_root)?;
 
-    let mut path = p_fetcher.fetch(args.project_root.as_str(), args.refresh)?;
+    let mut path = p_fetcher.fetch(project_root.as_str(), args.refresh)?;
 
     if args.sub_dir.is_some() {
         path = path.join(args.sub_dir.unwrap());
