@@ -36,9 +36,8 @@ impl Generator {
     pub fn generate(&self, project_root: &Path) -> Result<()> {
         self.generate_meta_dir(project_root)?;
         // Write the json file to the meta dir
-        let meta_file = project_root.join(".envy").join("meta.json");
-        let meta_json = serde_json::to_string_pretty(&self.pack)?;
-        std::fs::write(meta_file, meta_json)?;
+        self.pack.save(project_root)?;
+
         // Generate the dockerfile
         self.generate_docker(project_root)?;
         Ok(())

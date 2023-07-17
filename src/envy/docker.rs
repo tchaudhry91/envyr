@@ -48,9 +48,23 @@ pub fn get_docker_executor() -> Result<String> {
     Err(anyhow::anyhow!("Docker or Podman not found."))
 }
 
-pub fn run(project_root: &Path, fs_map: Vec<String>, args: Vec<String>) -> Result<()> {
+pub fn run(
+    project_root: &Path,
+    force_rebuild: bool,
+    version: String,
+    fs_map: Vec<String>,
+    args: Vec<String>,
+) -> Result<()> {
     let executor = get_docker_executor()?;
-    let image = build_local(project_root)?;
+
+    let pack = Pack::load(project_root)?;
+    if pack.artifacts.contains(&super::package::Artifact {
+        atype: super::package::AType::Docker,
+        name: "".to_string(),
+        path: None,
+    }) {}
+
+    let image = build_local(project_root, version)?;
 
     let command = format!(
         "{} run -it {} --rm {} {}",
@@ -76,10 +90,18 @@ fn get_fs_map_str(fs_map: Vec<String>) -> String {
     format!("{} {}", fs_map_string, fs_map.join(" -v "))
 }
 
-pub fn build_local(project_root: &Path) -> Result<String> {
+fn build_local(project_root: &Path, version: String) -> Result<String> {
     let executor = get_docker_executor()?;
     let pack = super::package::Pack::load(project_root)?;
-    let image = format!("envy-{}:latest", pack.name.to_lowercase());
+
+    let name_str = project_root.to_str().unwrap();
+    let name_str = name_str.replace("/", "-").replace(".", "-");
+
+    let image = format!(
+        "envy-{}:{}",
+        pack.name.to_lowercase(),
+        version.to_lowercase()
+    );
     let dockerfile_path = project_root.join(".envy").join("Dockerfile");
     debug!("Building local docker image: {}", image);
     let mut popen_conf = PopenConfig {

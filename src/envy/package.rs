@@ -16,6 +16,20 @@ pub enum PType {
     Other,
 }
 
+#[derive(Debug, Default, PartialEq, Clone, ValueEnum, Serialize, Deserialize)]
+pub enum AType {
+    #[default]
+    Docker, // A Docker Image
+    VEnv, // A Python Virtual Environment
+}
+
+#[derive(Debug, PartialEq, Serialize, Deserialize)]
+pub struct Artifact {
+    pub atype: AType,
+    pub name: String,
+    pub path: Option<PathBuf>,
+}
+
 // Pack is the base struct holding the Package information.
 #[derive(Debug, Serialize, Deserialize)]
 pub struct Pack {
@@ -24,6 +38,7 @@ pub struct Pack {
     pub ptype: PType,
     pub deps: Vec<String>,
     pub entrypoint: PathBuf,
+    pub artifacts: Vec<Artifact>,
 }
 impl Pack {
     pub fn load(project_root: &Path) -> Result<Self> {
@@ -31,6 +46,13 @@ impl Pack {
         let meta_json = std::fs::read_to_string(meta_file)?;
         let pack: Pack = serde_json::from_str(&meta_json)?;
         Ok(pack)
+    }
+
+    pub fn save(self, project_root: &Path) -> Result<()> {
+        let meta_file = project_root.join(".envy").join("meta.json");
+        let meta_json = serde_json::to_string_pretty(&self)?;
+        std::fs::write(meta_file, meta_json)?;
+        Ok(())
     }
 
     pub fn builder(project_root: &PathBuf) -> Result<PackBuilder> {
@@ -131,6 +153,7 @@ impl PackBuilder {
             interpreter: self.interpreter.unwrap_or_default(),
             entrypoint: self.entrypoint.unwrap_or_default(),
             ptype: self.ptype,
+            artifacts: vec![],
             deps: vec![],
         })
     }
