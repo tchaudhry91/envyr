@@ -1,4 +1,4 @@
-use super::utils;
+use super::utils::{self, PRIORITY_LAST};
 use anyhow::Result;
 use clap::ValueEnum;
 use log::debug;
@@ -240,23 +240,38 @@ fn detect_ptype_from_extension(entry: &DirEntry) -> Option<PType> {
 }
 
 fn detect_possible_entrypoint(entry: &DirEntry) -> Option<(PathBuf, String, u8)> {
-    // Check if the file has a .py extension
-    // and if it has a python main.
-    // This is a higher priority return than the shebang.
-    if entry.path().extension().unwrap_or_default() == "py"
-        && utils::check_python_main(&entry.path().to_path_buf()).unwrap_or(false)
-    {
-        return Some((
-            entry.path().to_path_buf(),
-            "/usr/bin/env python".to_string(),
-            0_u8,
-        ));
-    }
+    // Get the extension. If this fails, just use defaults, the shebang checks will run instead
+    let extension = entry
+        .path()
+        .extension()
+        .unwrap_or_default()
+        .to_str()
+        .unwrap_or_default();
+
+    match extension {
+        // A python file is a possible entrypoint. One with __main__ gets highest priority.
+        "py" => {
+            let priority = utils::check_python_exec_priority(&entry.path().to_path_buf())
+                .unwrap_or(PRIORITY_LAST);
+            return Some((
+                entry.path().to_path_buf(),
+                "/usr/bin/env python".to_string(),
+                priority,
+            ));
+        }
+        // To-Do
+        "js" => {}
+        _ => {}
+    };
 
     if let Some(interpreter) =
         utils::check_shebang_file(&entry.path().to_path_buf()).unwrap_or(None)
     {
-        return Some((entry.path().to_path_buf(), interpreter, 1_u8));
+        return Some((
+            entry.path().to_path_buf(),
+            interpreter,
+            utils::PRIORITY_LIKELY,
+        ));
     }
 
     None

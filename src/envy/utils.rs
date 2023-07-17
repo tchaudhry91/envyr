@@ -6,19 +6,32 @@ use std::{
     path::{Path, PathBuf},
 };
 
+pub const PRIORITY_TOP: u8 = 0;
+pub const PRIORITY_LIKELY: u8 = 1;
+pub const PRIORITY_UNLIKELY: u8 = 2;
+pub const PRIORITY_LAST: u8 = 3;
+
 use anyhow::Result;
 use serde_json::Value;
 
 use super::package::PType;
 
 // Checks if the file contains a python main.
-pub fn check_python_main(f: &PathBuf) -> Result<bool> {
-    let code = std::fs::read_to_string(f)?;
+pub fn check_python_main(code: &str) -> Result<bool> {
     if code.contains("if __name__ == \"__main__\":") || code.contains("if __name__ == '__main__':")
     {
         return Ok(true);
     }
     Ok(false)
+}
+
+pub fn check_python_exec_priority(f: &PathBuf) -> Result<u8> {
+    let code = std::fs::read_to_string(f)?;
+    let main_defined = check_python_main(&code)?;
+    if main_defined {
+        return Ok(PRIORITY_TOP);
+    }
+    Ok(PRIORITY_UNLIKELY)
 }
 
 // Returns the interpretter of the file if a shebang is found on top.
