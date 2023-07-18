@@ -51,24 +51,26 @@ pub fn get_docker_executor() -> Result<String> {
 pub fn run(
     project_root: &Path,
     force_rebuild: bool,
-    version: String,
+    tag: String,
     fs_map: Vec<String>,
+    port_map: Vec<String>,
     args: Vec<String>,
 ) -> Result<()> {
     let executor = get_docker_executor()?;
 
-    let pack = Pack::load(project_root)?;
-    if pack.artifacts.contains(&super::package::Artifact {
-        atype: super::package::AType::Docker,
-        name: "".to_string(),
-        path: None,
-    }) {}
+    // Check if the image already exists
+    let mut image = get_image_name(project_root, tag.clone())?;
 
-    let image = build_local(project_root, version)?;
+    if force_rebuild || !check_image_existence(&image)? {
+        // rebuild
+        debug!("Building image: {}", image);
+        image = build_local(project_root, tag)?;
+    }
 
     let command = format!(
-        "{} run -it {} --rm {} {}",
+        "{} run -it {} {} --rm {} {}",
         executor,
+        get_port_map_str(port_map),
         get_fs_map_str(fs_map),
         image,
         args.join(" ")
@@ -82,6 +84,14 @@ pub fn run(
     Ok(())
 }
 
+fn get_port_map_str(port_map: Vec<String>) -> String {
+    if port_map.is_empty() {
+        return "".to_string();
+    }
+    let port_map_string = String::from("-p");
+    format!("{} {}", port_map_string, port_map.join(" -p "))
+}
+
 fn get_fs_map_str(fs_map: Vec<String>) -> String {
     if fs_map.is_empty() {
         return "".to_string();
@@ -90,18 +100,38 @@ fn get_fs_map_str(fs_map: Vec<String>) -> String {
     format!("{} {}", fs_map_string, fs_map.join(" -v "))
 }
 
-fn build_local(project_root: &Path, version: String) -> Result<String> {
+fn get_image_name(project_root: &Path, tag: String) -> Result<String> {
+    let mut name_str = String::from(project_root.to_str().unwrap());
+    name_str = name_str.replace(['/', '.'], "-");
+    Ok(format!(
+        "envy{}:{}",
+        name_str.to_lowercase(),
+        tag.to_lowercase()
+    ))
+}
+
+fn check_image_existence(image: &str) -> Result<bool> {
     let executor = get_docker_executor()?;
-    let pack = super::package::Pack::load(project_root)?;
+    let cmd = std::process::Command::new(executor)
+        .arg("images")
+        .arg("-q")
+        .arg("--filter")
+        .arg(format!("reference={}", image))
+        .output()?;
+    let status = cmd.status;
+    let stdout = String::from_utf8(cmd.stdout)?;
 
-    let name_str = project_root.to_str().unwrap();
-    let name_str = name_str.replace("/", "-").replace(".", "-");
+    if status.success() && !stdout.is_empty() {
+        return Ok(true);
+    }
+    Ok(false)
+}
 
-    let image = format!(
-        "envy-{}:{}",
-        pack.name.to_lowercase(),
-        version.to_lowercase()
-    );
+fn build_local(project_root: &Path, tag: String) -> Result<String> {
+    let executor = get_docker_executor()?;
+
+    let image = get_image_name(project_root, tag)?;
+
     let dockerfile_path = project_root.join(".envy").join("Dockerfile");
     debug!("Building local docker image: {}", image);
     let mut popen_conf = PopenConfig {

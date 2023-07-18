@@ -1,7 +1,7 @@
 use std::path::Path;
 
-use super::docker;
 use super::package::Pack;
+use super::{docker, utils};
 use anyhow::Result;
 use clap::ValueEnum;
 use serde::{Deserialize, Serialize};
@@ -33,10 +33,25 @@ impl Generator {
         Ok(())
     }
 
+    pub fn generate_python(&self, project_root: &Path) -> Result<()> {
+        if !utils::check_requirements_txt(project_root) {
+            // Attempt to generate with pipreqs
+            if utils::create_requirements_txt(project_root).is_err() {
+                log::warn!("No requirements.txt found. Unable to generate using pipreqs. You may need to install pipreqs separately.");
+            }
+        }
+        Ok(())
+    }
+
     pub fn generate(&self, project_root: &Path) -> Result<()> {
         self.generate_meta_dir(project_root)?;
         // Write the json file to the meta dir
         self.pack.save(project_root)?;
+
+        // Generate language specific stuff
+        if matches!(self.pack.ptype, super::package::PType::Python) {
+            self.generate_python(project_root)?;
+        }
 
         // Generate the dockerfile
         self.generate_docker(project_root)?;

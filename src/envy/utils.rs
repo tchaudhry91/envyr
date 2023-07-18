@@ -5,16 +5,14 @@ use std::{
     io::{self, BufRead},
     path::{Path, PathBuf},
 };
-
 pub const PRIORITY_TOP: u8 = 0;
 pub const PRIORITY_LIKELY: u8 = 1;
 pub const PRIORITY_UNLIKELY: u8 = 2;
 pub const PRIORITY_LAST: u8 = 3;
 
+use super::package::PType;
 use anyhow::Result;
 use serde_json::Value;
-
-use super::package::PType;
 
 // Checks if the file contains a python main.
 pub fn check_python_main(code: &str) -> Result<bool> {
@@ -92,4 +90,18 @@ pub fn detect_main_node(project_root: &Path) -> Option<PathBuf> {
         }
         Err(_) => None,
     }
+}
+
+pub fn create_requirements_txt(project_root: &Path) -> Result<()> {
+    // Assume pipreqs exists
+    let output = std::process::Command::new("pipreqs")
+        .arg(project_root)
+        .output()?;
+    if !output.status.success() {
+        return Err(anyhow::anyhow!(
+            "Failed to create requirements.txt: {}",
+            String::from_utf8(output.stderr)?
+        ));
+    }
+    Ok(())
 }

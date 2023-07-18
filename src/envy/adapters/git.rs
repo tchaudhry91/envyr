@@ -3,7 +3,7 @@
 use super::fetcher::Fetcher;
 use anyhow::{anyhow, Result};
 use log::debug;
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 pub struct GitFetcher {
     storage_dir_root: PathBuf,
@@ -19,59 +19,127 @@ impl GitFetcher {
 }
 
 impl Fetcher for GitFetcher {
-    fn fetch(&self, url: &str, refresh: bool) -> Result<PathBuf> {
+    fn fetch(&self, url: &str, version: &str, refresh: bool) -> Result<PathBuf> {
         let path = self.storage_dir_root.clone().join(get_storage_path(url)?);
         // Pull instead of clone if the repo already exists
         if path.exists() {
             debug!("Clone already exists: {:?}", path);
-            if !refresh {
-                debug!("Skipping refresh. Returning existing path.");
-                return Ok(path);
+            swap_back_to_latest(&path)?;
+            if refresh {
+                pull_repo(&path)?;
+                fetch_tags(&path)?;
             }
-            debug!("Performing pull in existing clone.");
-            let status = std::process::Command::new("git")
-                .arg("pull")
-                .current_dir(&path)
-                .output()?;
-            if !status.status.success() {
-                return Err(anyhow!(
-                    "Failed to pull git repository: {:?}",
-                    status.stderr
-                ));
-            };
-            Ok(path)
+            checkout_version(&path, version)?;
         } else {
-            // Create basedir if it doesn't exist
-            //
-            debug!("Cloning git repository: {:?}", path);
-            let base_dir = path.parent();
-            match base_dir {
-                Some(dir) => {
-                    if !dir.exists() {
-                        std::fs::create_dir_all(dir)?;
-                    }
-                }
-                None => {
-                    return Err(anyhow!("Failed to get parent directory of {:?}", path));
-                }
-            }
+            clone_repo(url, &path)?;
+            fetch_tags(&path)?;
+            checkout_version(&path, version)?;
+        }
+        Ok(path)
+    }
+}
 
-            let status = std::process::Command::new("git")
-                .arg("clone")
-                .arg("--depth")
-                .arg("1")
-                .arg(url)
-                .arg(&path)
-                .output()?;
-            if !status.status.success() {
-                return Err(anyhow!(
-                    "Failed to clone git repository: {:?}",
-                    status.stderr
-                ));
-            };
-            Ok(path)
+fn pull_repo(path: &Path) -> Result<()> {
+    let status = std::process::Command::new("git")
+        .arg("pull")
+        .current_dir(path)
+        .output()?;
+    if !status.status.success() {
+        return Err(anyhow!(
+            "Failed to pull git repository: {:?}",
+            String::from_utf8(status.stderr),
+        ));
+    };
+    Ok(())
+}
+
+fn fetch_tags(path: &Path) -> Result<()> {
+    debug!("Fetching tags for: {:?}", path);
+    let status = std::process::Command::new("git")
+        .arg("fetch")
+        .arg("--tags")
+        .current_dir(path)
+        .output()?;
+    if !status.status.success() {
+        return Err(anyhow!(
+            "Failed to fetch tags: {:?}",
+            String::from_utf8(status.stderr),
+        ));
+    };
+    Ok(())
+}
+
+fn checkout_version(path: &Path, version: &str) -> Result<()> {
+    if version != "latest" {
+        debug!("Checking out version: {}", version);
+        let status = std::process::Command::new("git")
+            .arg("checkout")
+            .arg(version)
+            .current_dir(path)
+            .output()?;
+        if !status.status.success() {
+            return Err(anyhow!(
+                "Failed to checkout version: {:?}",
+                String::from_utf8(status.stderr),
+            ));
+        };
+    }
+    Ok(())
+}
+
+fn clone_repo(url: &str, path: &Path) -> Result<()> {
+    // Create basedir if it doesn't exist
+    //
+    debug!("Cloning git repository: {:?}", path);
+    let base_dir = path.parent();
+    match base_dir {
+        Some(dir) => {
+            if !dir.exists() {
+                std::fs::create_dir_all(dir)?;
+            }
+        }
+        None => {
+            return Err(anyhow!("Failed to get parent directory of {:?}", path));
         }
     }
+
+    let status = std::process::Command::new("git")
+        .arg("clone")
+        .arg(url)
+        .arg(path)
+        .output()?;
+    if !status.status.success() {
+        return Err(anyhow!(
+            "Failed to clone git repository: {:?}",
+            String::from_utf8(status.stderr),
+        ));
+    };
+
+    Ok(())
+}
+
+fn swap_back_to_latest(path: &Path) -> Result<()> {
+    debug!("Swapping back to main/master branch");
+    let out = std::process::Command::new("git")
+        .arg("checkout")
+        .arg("main")
+        .current_dir(path)
+        .output()?;
+    if !out.status.success() {
+        // Try master
+        let out = std::process::Command::new("git")
+            .arg("checkout")
+            .arg("master")
+            .current_dir(path)
+            .output()?;
+        if !out.status.success() {
+            return Err(anyhow!(
+                "Failed to swap back to main/master branch: {:?}",
+                String::from_utf8(out.stderr),
+            ));
+        }
+    }
+    Ok(())
 }
 
 fn get_storage_path(url: &str) -> Result<PathBuf> {

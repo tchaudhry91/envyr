@@ -2,7 +2,7 @@ mod envy;
 
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
-use envy::{adapters::fetcher, meta::Executors};
+use envy::adapters::fetcher;
 use log::debug;
 use std::path::PathBuf;
 
@@ -15,6 +15,14 @@ struct GlobalOpts {
         global = true
     )]
     sub_dir: Option<String>,
+
+    #[arg(
+        long,
+        short,
+        default_value = "latest",
+        help = "The tag of the package to run. Accepts git tags/commits. Defaults to latest."
+    )]
+    tag: Option<String>,
 
     #[arg(
         long,
@@ -75,6 +83,9 @@ enum Command {
         #[clap(long, num_args = 0.., help ="Mount the given directory as a volume. Format: host_dir:container_dir. Allows multiples. Only applicable on Docker Executor.")]
         fs_map: Vec<String>,
 
+        #[clap(long, num_args = 0.., help ="Map ports to host system, Format host_port:source_port. Allows multiples. Only applicable on Docker Executor.")]
+        port_map: Vec<String>,
+
         #[clap(flatten)]
         overrides: OverrideOpts,
 
@@ -126,7 +137,9 @@ fn main() -> Result<()> {
 
     let p_fetcher = fetcher::get_fetcher(project_root.as_str(), envy_root)?;
 
-    let mut path = p_fetcher.fetch(project_root.as_str(), args.refresh)?;
+    let refresh = args.refresh;
+    let tag = args.tag.unwrap_or("latest".to_string());
+    let mut path = p_fetcher.fetch(project_root.as_str(), tag.as_str(), refresh)?;
 
     if args.sub_dir.is_some() {
         path = path.join(args.sub_dir.unwrap());
@@ -145,36 +158,58 @@ fn main() -> Result<()> {
             autogen,
             args,
             fs_map,
+            port_map,
         } => {
             debug!(
-                "Running {:?} executor with autogen={}, fs_map:{:?}, overrides:{:?} and args: {:?}",
-                executor, autogen, fs_map, overrides, args
+                "Running {:?} executor with autogen={}, fs_map:{:?}, port_map:{:?}, overrides:{:?} and args: {:?}",
+                executor, autogen, fs_map, port_map, overrides, args
             );
-            run(canon_path, executor, autogen, fs_map, overrides, args)?;
+            let config = RunConfig {
+                executor,
+                refresh,
+                autogen,
+                tag,
+                fs_map,
+                port_map,
+                overrides,
+                args,
+            };
+            run(canon_path, config)?;
         }
     }
 
     Ok(())
 }
 
-fn run(
-    canon_path: PathBuf,
-    executor: Executors,
+struct RunConfig {
+    executor: envy::meta::Executors,
+    refresh: bool,
     autogen: bool,
+    tag: String,
     fs_map: Vec<String>,
+    port_map: Vec<String>,
     overrides: OverrideOpts,
     args: Vec<String>,
-) -> Result<()> {
-    if autogen {
+}
+
+fn run(canon_path: PathBuf, config: RunConfig) -> Result<()> {
+    if config.autogen {
         let pack_builder = envy::package::Pack::builder(&canon_path)?;
-        let pack_builder = override_builder_opts(overrides, pack_builder);
+        let pack_builder = override_builder_opts(config.overrides, pack_builder);
         let pack = pack_builder.build()?;
         let generator = envy::meta::Generator::new(pack);
         generator.generate(&canon_path)?;
     }
-    match executor {
+    match config.executor {
         envy::meta::Executors::Docker => {
-            envy::docker::run(&canon_path, fs_map, args)?;
+            envy::docker::run(
+                &canon_path,
+                config.refresh,
+                config.tag,
+                config.fs_map,
+                config.port_map,
+                config.args,
+            )?;
         }
         envy::meta::Executors::Nix => todo!(),
         envy::meta::Executors::Native => todo!(),
