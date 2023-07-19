@@ -91,7 +91,7 @@ Arguments:
   [ARGS]...       
 
 Options:
-  -s, --sub-dir <SUB_DIR>          relative sub-directory to the project_root, useful if you're working with monorepos.
+  -s, --sub-dir <SUB_DIR>          relative sub-directory to the project_root, useful if you are working with monorepos.
   -t, --tag <TAG>                  The tag of the package to run. Accepts git tags/commits. Defaults to latest. [default: latest]
       --refresh                    refresh code cache before running.
   -e, --executor <EXECUTOR>        [default: docker] [possible values: docker, nix, native]
@@ -105,7 +105,7 @@ Options:
   -h, --help                       Print help
 ```
 
-Most cases should be covered by autodetection. Use the overrides if `--autogen` doesn't work.
+Most cases should be covered by autodetection. Use the overrides if `--autogen` does not work.
 
 
 **Generating Package Metadata in Advance**
@@ -119,7 +119,7 @@ Arguments:
   <PROJECT_ROOT>  The location to the project. Accepts, local filesystem path/git repos.
 
 Options:
-  -s, --sub-dir <SUB_DIR>          relative sub-directory to the project_root, useful if you're working with monorepos.
+  -s, --sub-dir <SUB_DIR>          relative sub-directory to the project_root, useful if you are working with monorepos.
   -t, --tag <TAG>                  The tag of the package to run. Accepts git tags/commits. Defaults to latest. [default: latest]
       --refresh                    refresh code cache before running.
   -n, --name <NAME>                
