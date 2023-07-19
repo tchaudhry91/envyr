@@ -11,8 +11,7 @@ struct GlobalOpts {
     #[arg(
         long,
         short,
-        help = "relative sub-directory to the project_root, useful if you're working with monorepos.",
-        global = true
+        help = "relative sub-directory to the project_root, useful if you're working with monorepos."
     )]
     sub_dir: Option<String>,
 
@@ -23,15 +22,6 @@ struct GlobalOpts {
         help = "The tag of the package to run. Accepts git tags/commits. Defaults to latest."
     )]
     tag: Option<String>,
-
-    #[arg(
-        long,
-        short,
-        help = "Emit Envy logs to stdout. Useful for debugging. But may spoil pipes.",
-        global = true,
-        default_value_t = false
-    )]
-    verbose: bool,
 
     #[clap(
         long,
@@ -64,12 +54,24 @@ enum Command {
         about = "Generate the associated meta files. Overwrites if re-run."
     )]
     Generate {
+        #[clap(help = "The location to the project. Accepts, local filesystem path/git repos.")]
+        project_root: String,
+
+        #[clap(flatten)]
+        global_opts: GlobalOpts,
+
         #[clap(flatten)]
         args: OverrideOpts,
     },
 
     #[clap(name = "run", about = "Run the package with the given executor.")]
     Run {
+        #[clap(help = "The location to the project. Accepts, local filesystem path/git repos.")]
+        project_root: String,
+
+        #[clap(flatten)]
+        global_opts: GlobalOpts,
+
         #[clap(long, short, value_enum, default_value_t = envy::meta::Executors::Docker)]
         executor: envy::meta::Executors,
 
@@ -100,59 +102,77 @@ enum Command {
 #[command(about="A tool to automagically create 'executable' packages for your scripts.", long_about=None)]
 #[command(version = "0.1.0")]
 pub struct App {
-    #[clap(flatten)]
-    args: GlobalOpts,
-
     #[clap(subcommand)]
     command: Command,
 
-    #[clap(
-        help = "The location to the project. Accepts, local filesystem path/git repos.",
-        index = 1
+    #[arg(
+        long,
+        short,
+        help = "Emit Envy logs to stdout. Useful for debugging. But may spoil pipes.",
+        default_value_t = false
     )]
-    project_root: String,
+    verbose: bool,
 }
 
-fn main() -> Result<()> {
-    let app = App::parse();
-
+fn setup_logging(verbose: bool) -> Result<()> {
     let mut log_level = log::LevelFilter::Error;
-
-    if app.args.verbose {
+    if verbose {
         log_level = log::LevelFilter::Debug;
     }
+
     simplelog::TermLogger::init(
         log_level,
         simplelog::Config::default(),
         simplelog::TerminalMode::Mixed,
         simplelog::ColorChoice::Auto,
     )?;
+    Ok(())
+}
 
-    debug!("Started Envy: Parsed args: {:?}", app.args);
-    let args = app.args;
-    let project_root = app.project_root;
+fn fetch(
+    envy_root: PathBuf,
+    project_root: &str,
+    tag: &str,
+    refresh: bool,
+    subdir: Option<String>,
+) -> Result<PathBuf> {
+    let p_fetcher = fetcher::get_fetcher(project_root, envy_root)?;
+    let mut path = p_fetcher.fetch(project_root, tag, refresh)?;
+    if let Some(subdir) = subdir {
+        path = path.join(subdir);
+    }
+    let path = std::fs::canonicalize(path)?;
+    Ok(path)
+}
+
+fn main() -> Result<()> {
+    let app = App::parse();
+
     // TODO: Make this configurable later
     let homedir = home::home_dir().unwrap();
     let envy_root = homedir.join(".envy");
 
-    let p_fetcher = fetcher::get_fetcher(project_root.as_str(), envy_root)?;
-
-    let refresh = args.refresh;
-    let tag = args.tag.unwrap_or("latest".to_string());
-    let mut path = p_fetcher.fetch(project_root.as_str(), tag.as_str(), refresh)?;
-
-    if args.sub_dir.is_some() {
-        path = path.join(args.sub_dir.unwrap());
-    }
-
-    let canon_path = std::fs::canonicalize(path)?;
+    setup_logging(app.verbose)?;
 
     match app.command {
-        Command::Generate { args } => {
+        Command::Generate {
+            args,
+            project_root,
+            global_opts,
+        } => {
+            let path = fetch(
+                envy_root,
+                &project_root,
+                global_opts.tag.unwrap_or("latest".to_string()).as_str(),
+                global_opts.refresh,
+                global_opts.sub_dir,
+            )?;
             debug!("Running Generator with args: {:?}", args);
-            generate(canon_path, args)?;
+            generate(path, args)?;
         }
         Command::Run {
+            project_root,
+            global_opts,
             executor,
             overrides,
             autogen,
@@ -164,9 +184,17 @@ fn main() -> Result<()> {
                 "Running {:?} executor with autogen={}, fs_map:{:?}, port_map:{:?}, overrides:{:?} and args: {:?}",
                 executor, autogen, fs_map, port_map, overrides, args
             );
+            let tag = global_opts.tag.unwrap_or("latest".to_string());
+            let path = fetch(
+                envy_root,
+                &project_root,
+                tag.as_str(),
+                global_opts.refresh,
+                global_opts.sub_dir,
+            )?;
             let config = RunConfig {
                 executor,
-                refresh,
+                refresh: global_opts.refresh,
                 autogen,
                 tag,
                 fs_map,
@@ -174,7 +202,7 @@ fn main() -> Result<()> {
                 overrides,
                 args,
             };
-            run(canon_path, config)?;
+            run(path, config)?;
         }
     }
 
