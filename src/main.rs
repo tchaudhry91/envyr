@@ -88,6 +88,9 @@ enum Command {
         #[clap(long, num_args = 0.., help ="Map ports to host system, Format host_port:source_port. Allows multiples. Only applicable on Docker Executor.")]
         port_map: Vec<String>,
 
+        #[clap(long, num_args = 0.., help="Environment variables to pass through, leave value empty to pass through the value from the current environment. Format: 'key=value' or 'key' (passwthrough). Allows multiples.")]
+        env_map: Vec<String>,
+
         #[clap(flatten)]
         overrides: OverrideOpts,
 
@@ -178,6 +181,7 @@ fn main() -> Result<()> {
             autogen,
             args,
             fs_map,
+            env_map,
             port_map,
         } => {
             debug!(
@@ -199,6 +203,7 @@ fn main() -> Result<()> {
                 tag,
                 fs_map,
                 port_map,
+                env_map,
                 overrides,
                 args,
             };
@@ -216,6 +221,7 @@ struct RunConfig {
     tag: String,
     fs_map: Vec<String>,
     port_map: Vec<String>,
+    env_map: Vec<String>,
     overrides: OverrideOpts,
     args: Vec<String>,
 }
@@ -236,6 +242,7 @@ fn run(canon_path: PathBuf, config: RunConfig) -> Result<()> {
                 config.tag,
                 config.fs_map,
                 config.port_map,
+                config.env_map,
                 config.args,
             )?;
         }

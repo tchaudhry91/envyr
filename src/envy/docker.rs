@@ -1,3 +1,4 @@
+use std::env;
 use std::path::Path;
 
 use anyhow::Result;
@@ -54,6 +55,7 @@ pub fn run(
     tag: String,
     fs_map: Vec<String>,
     port_map: Vec<String>,
+    env_map: Vec<String>,
     args: Vec<String>,
 ) -> Result<()> {
     let executor = get_docker_executor()?;
@@ -68,10 +70,11 @@ pub fn run(
     }
 
     let command = format!(
-        "{} run -it {} {} --rm {} {}",
+        "{} run -it {} {} {} --rm {} {}",
         executor,
         get_port_map_str(port_map),
         get_fs_map_str(fs_map),
+        get_env_map_str(env_map),
         image,
         args.join(" ")
     );
@@ -82,6 +85,26 @@ pub fn run(
     )?;
     p.wait()?;
     Ok(())
+}
+
+fn get_env_map_str(env_map: Vec<String>) -> String {
+    if env_map.is_empty() {
+        return "".to_string();
+    }
+    let env_map = env_map
+        .iter()
+        .map(|x| {
+            if x.contains('=') {
+                x.to_string()
+            } else {
+                let val = env::var(x).unwrap_or("".to_string());
+                format!("{}={}", x, val)
+            }
+        })
+        .collect::<Vec<String>>();
+
+    let env_map_string = String::from("-e");
+    format!("{} {}", env_map_string, env_map.join(" -e "))
 }
 
 fn get_port_map_str(port_map: Vec<String>) -> String {
