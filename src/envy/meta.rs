@@ -89,6 +89,15 @@ pub fn load_aliases(envy_root: &Path) -> Result<AliasMap> {
     Ok(aliases)
 }
 
+pub fn remove_alias(envy_root: &Path, name: String) -> Result<()> {
+    let mut aliases = load_aliases(envy_root)?;
+    aliases.remove(&name);
+    let aliases_f = envy_root.join("aliases.json");
+    let aliases = serde_json::to_string_pretty(&aliases)?;
+    std::fs::write(aliases_f, aliases)?;
+    Ok(())
+}
+
 pub fn store_alias(envy_root: &Path, name: String, conf: RunConfig) -> Result<()> {
     let mut aliases = load_aliases(envy_root)?;
     aliases.insert(name, conf);

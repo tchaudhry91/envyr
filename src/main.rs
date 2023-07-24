@@ -50,6 +50,18 @@ struct OverrideOpts {
 }
 
 #[derive(Debug, Subcommand)]
+enum AliasSubcommand {
+    #[clap(name = "list", about = "List all aliases.")]
+    List,
+
+    #[clap(name = "delete", about = "Delete an existing alias.")]
+    Delete {
+        #[clap(help = "The name of the alias to delete.")]
+        name: String,
+    },
+}
+
+#[derive(Debug, Subcommand)]
 enum Command {
     // Generate the meta.json file. This will overwrite if re-run.
     #[clap(
@@ -65,6 +77,12 @@ enum Command {
 
         #[clap(flatten)]
         args: OverrideOpts,
+    },
+
+    #[clap(name = "alias", about = "Subcommands for aliases.")]
+    Alias {
+        #[clap(subcommand)]
+        subcmd: AliasSubcommand,
     },
 
     #[clap(name = "run", about = "Run the package with the given executor.")]
@@ -241,6 +259,21 @@ fn main() -> Result<()> {
                 meta::store_alias(&envy_root, alias, config)?;
             }
         }
+        Command::Alias { subcmd } => match subcmd {
+            AliasSubcommand::List => {
+                let aliases = meta::load_aliases(&envy_root)?;
+                if aliases.is_empty() {
+                    println!("No aliases found.");
+                    return Ok(());
+                }
+                for (alias, config) in aliases {
+                    println!("{}: {:?}", alias, config.path);
+                }
+            }
+            AliasSubcommand::Delete { name } => {
+                meta::remove_alias(&envy_root, name)?;
+            }
+        },
     }
 
     Ok(())
