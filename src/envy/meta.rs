@@ -1,9 +1,12 @@
 use std::path::Path;
 
+use crate::RunConfig;
+
 use super::package::Pack;
 use super::{docker, utils};
 use anyhow::Result;
 use clap::ValueEnum;
+use log::debug;
 use serde::{Deserialize, Serialize};
 
 pub struct Generator {
@@ -65,4 +68,32 @@ pub enum Executors {
     Docker,
     Nix,
     Native,
+}
+
+pub type AliasMap = std::collections::HashMap<String, RunConfig>;
+
+pub fn load_aliases(envy_root: &Path) -> Result<AliasMap> {
+    let aliases_f = envy_root.join("aliases.json");
+    // If the file doesn't exist, create it
+    if !aliases_f.exists() {
+        let aliases = serde_json::to_string_pretty(&AliasMap::new())?;
+        std::fs::write(aliases_f.clone(), aliases)?;
+        debug!("Created new aliases file at {}", aliases_f.display());
+    }
+
+    // Read the json from the file
+    let aliases = std::fs::read_to_string(aliases_f)?;
+    debug!("Loaded aliases..");
+    // Deserialize the json into a map
+    let aliases: AliasMap = serde_json::from_str(&aliases)?;
+    Ok(aliases)
+}
+
+pub fn store_alias(envy_root: &Path, name: String, conf: RunConfig) -> Result<()> {
+    let mut aliases = load_aliases(envy_root)?;
+    aliases.insert(name, conf);
+    let aliases_f = envy_root.join("aliases.json");
+    let aliases = serde_json::to_string_pretty(&aliases)?;
+    std::fs::write(aliases_f, aliases)?;
+    Ok(())
 }

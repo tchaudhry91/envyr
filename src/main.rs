@@ -4,7 +4,10 @@ use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
 use envy::adapters::fetcher;
 use log::debug;
+use serde::{Deserialize, Serialize};
 use std::path::PathBuf;
+
+use crate::envy::meta;
 
 #[derive(Debug, Args)]
 struct GlobalOpts {
@@ -31,7 +34,7 @@ struct GlobalOpts {
     refresh: bool,
 }
 
-#[derive(Debug, Args)]
+#[derive(Debug, Args, Serialize, Deserialize, Clone)]
 struct OverrideOpts {
     #[arg(long, short)]
     name: Option<String>,
@@ -71,6 +74,12 @@ enum Command {
 
         #[clap(flatten)]
         global_opts: GlobalOpts,
+
+        #[clap(
+            long,
+            help = "Upon successful completion, record this run command as an alias. To allow usage of `envy run <alias>` in the future."
+        )]
+        alias: Option<String>,
 
         #[clap(long, short, value_enum, default_value_t = envy::meta::Executors::Docker)]
         executor: envy::meta::Executors,
@@ -132,6 +141,16 @@ fn setup_logging(verbose: bool) -> Result<()> {
     Ok(())
 }
 
+fn get_alias_config(envy_root: PathBuf, alias: String) -> Option<RunConfig> {
+    let aliases = meta::load_aliases(&envy_root);
+    if aliases.is_err() {
+        debug!("No aliases found.");
+        return None;
+    }
+    let aliases = aliases.unwrap();
+    aliases.get(&alias).cloned()
+}
+
 fn fetch(
     envy_root: PathBuf,
     project_root: &str,
@@ -183,20 +202,30 @@ fn main() -> Result<()> {
             fs_map,
             env_map,
             port_map,
+            alias,
         } => {
             debug!(
                 "Running {:?} executor with autogen={}, fs_map:{:?}, port_map:{:?}, overrides:{:?} and args: {:?}",
                 executor, autogen, fs_map, port_map, overrides, args
             );
+            if let Some(mut config) = get_alias_config(envy_root.clone(), project_root.clone()) {
+                debug!("Found alias config: {:?}", config);
+                if !args.is_empty() {
+                    config.args = args;
+                }
+                run(config)?;
+                return Ok(()); // Early return if alias is found
+            };
             let tag = global_opts.tag.unwrap_or("latest".to_string());
             let path = fetch(
-                envy_root,
+                envy_root.clone(),
                 &project_root,
                 tag.as_str(),
                 global_opts.refresh,
                 global_opts.sub_dir,
             )?;
             let config = RunConfig {
+                path,
                 executor,
                 refresh: global_opts.refresh,
                 autogen,
@@ -207,14 +236,19 @@ fn main() -> Result<()> {
                 overrides,
                 args,
             };
-            run(path, config)?;
+            run(config.clone())?;
+            if let Some(alias) = alias {
+                meta::store_alias(&envy_root, alias, config)?;
+            }
         }
     }
 
     Ok(())
 }
 
-struct RunConfig {
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RunConfig {
+    path: PathBuf,
     executor: envy::meta::Executors,
     refresh: bool,
     autogen: bool,
@@ -226,7 +260,8 @@ struct RunConfig {
     args: Vec<String>,
 }
 
-fn run(canon_path: PathBuf, config: RunConfig) -> Result<()> {
+fn run(config: RunConfig) -> Result<()> {
+    let canon_path = config.path;
     if config.autogen {
         let pack_builder = envy::package::Pack::builder(&canon_path)?;
         let pack_builder = override_builder_opts(config.overrides, pack_builder);
