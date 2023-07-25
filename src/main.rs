@@ -5,7 +5,7 @@ use clap::{Args, Parser, Subcommand};
 use envy::adapters::fetcher;
 use log::debug;
 use serde::{Deserialize, Serialize};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 
 use crate::envy::meta;
 
@@ -231,30 +231,24 @@ fn main() -> Result<()> {
                 if !args.is_empty() {
                     config.args = args;
                 }
-                run(config)?;
+                run(&envy_root, config)?;
                 return Ok(()); // Early return if alias is found
             };
             let tag = global_opts.tag.unwrap_or("latest".to_string());
-            let path = fetch(
-                envy_root.clone(),
-                &project_root,
-                tag.as_str(),
-                global_opts.refresh,
-                global_opts.sub_dir,
-            )?;
             let config = RunConfig {
-                path,
+                project_root,
                 executor,
                 refresh: global_opts.refresh,
                 autogen,
                 tag,
                 fs_map,
                 port_map,
+                sub_dir: global_opts.sub_dir,
                 env_map,
                 overrides,
                 args,
             };
-            run(config.clone())?;
+            run(&envy_root, config.clone())?;
             if let Some(alias) = alias {
                 meta::store_alias(&envy_root, alias, config)?;
             }
@@ -267,7 +261,7 @@ fn main() -> Result<()> {
                     return Ok(());
                 }
                 for (alias, config) in aliases {
-                    println!("{}: {:?}", alias, config.path);
+                    println!("{}: {:?}", alias, config.project_root);
                 }
             }
             AliasSubcommand::Delete { name } => {
@@ -281,7 +275,8 @@ fn main() -> Result<()> {
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct RunConfig {
-    path: PathBuf,
+    project_root: String,
+    sub_dir: Option<String>,
     executor: envy::meta::Executors,
     refresh: bool,
     autogen: bool,
@@ -293,8 +288,14 @@ pub struct RunConfig {
     args: Vec<String>,
 }
 
-fn run(config: RunConfig) -> Result<()> {
-    let canon_path = config.path;
+fn run(envy_root: &Path, config: RunConfig) -> Result<()> {
+    let canon_path = fetch(
+        envy_root.to_path_buf(),
+        &config.project_root,
+        config.tag.as_str(),
+        config.refresh,
+        config.sub_dir,
+    )?;
     if config.autogen {
         let pack_builder = envy::package::Pack::builder(&canon_path)?;
         let pack_builder = override_builder_opts(config.overrides, pack_builder);
