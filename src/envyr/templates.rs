@@ -1,5 +1,5 @@
 pub static TEMPLATE_DOCKERFILE: &str = r#"
-# Envy Base
+# Envyr Base
 {{#if (eq ptype "Python")}}
 FROM python:alpine
 {{else}}
@@ -18,20 +18,20 @@ RUN apk add --no-cache ca-certificates bash
 RUN apk add --no-cache {{#each os_deps}} {{this}} {{/each}}
 {{/if}}
 
-WORKDIR /envy/app
+WORKDIR /envyr/app
 # Install Type Specific Deps
 {{#if type_reqs}}
 {{#if (eq ptype "Python")}}
-ADD ./requirements.txt /envy/app/requirements.txt
+ADD ./requirements.txt /envyr/app/requirements.txt
 RUN pip install -r requirements.txt
 {{/if}}
 {{#if (eq ptype "Node")}}
-ADD ./package.json /envy/app/package.json
+ADD ./package.json /envyr/app/package.json
 RUN npm install
 {{/if}}
 {{/if}}
 
-ADD . /envy/app
+ADD . /envyr/app
 ENTRYPOINT ["{{interpreter}}", "{{entrypoint}}"]
 "#;
 

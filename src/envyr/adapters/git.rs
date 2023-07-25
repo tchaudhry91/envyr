@@ -179,15 +179,15 @@ mod tests {
 
     #[test]
     fn test_git_unwrapping() {
-        let url = "git@github.com:envy-lang/envy.git";
+        let url = "git@github.com:envyr-lang/envyr.git";
         let name = get_project_name(url).unwrap();
-        assert_eq!(name, "envy");
+        assert_eq!(name, "envyr");
         let org = get_org_name(url).unwrap();
-        assert_eq!(org, "envy-lang");
+        assert_eq!(org, "envyr-lang");
         let provider = get_git_provider(url).unwrap();
         assert_eq!(provider, "github.com");
 
         let full_path = get_storage_path(url).unwrap();
-        assert_eq!(full_path, PathBuf::from("github.com/envy-lang/envy"));
+        assert_eq!(full_path, PathBuf::from("github.com/envyr-lang/envyr"));
     }
 }

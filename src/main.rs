@@ -1,13 +1,13 @@
-mod envy;
+mod envyr;
 
 use anyhow::Result;
 use clap::{Args, Parser, Subcommand};
-use envy::adapters::fetcher;
+use envyr::adapters::fetcher;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
 
-use crate::envy::meta;
+use crate::envyr::meta;
 
 #[derive(Debug, Args)]
 struct GlobalOpts {
@@ -46,7 +46,7 @@ struct OverrideOpts {
     entrypoint: Option<PathBuf>,
 
     #[arg(long = "type", short = 't', value_enum)]
-    ptype: Option<envy::package::PType>,
+    ptype: Option<envyr::package::PType>,
 }
 
 #[derive(Debug, Subcommand)]
@@ -95,12 +95,12 @@ enum Command {
 
         #[clap(
             long,
-            help = "Upon successful completion, record this run command as an alias. To allow usage of `envy run <alias>` in the future."
+            help = "Upon successful completion, record this run command as an alias. To allow usage of `envyr run <alias>` in the future."
         )]
         alias: Option<String>,
 
-        #[clap(long, short, value_enum, default_value_t = envy::meta::Executors::Docker)]
-        executor: envy::meta::Executors,
+        #[clap(long, short, value_enum, default_value_t = envyr::meta::Executors::Docker)]
+        executor: envyr::meta::Executors,
 
         #[clap(
             long,
@@ -127,7 +127,7 @@ enum Command {
 }
 
 #[derive(Parser)]
-#[command(name = "envy")]
+#[command(name = "envyr")]
 #[command(author = "Tanmay Chaudhry <tanmay.chaudhry@gmail.com")]
 #[command(about="A tool to automagically create 'executable' packages for your scripts.", long_about=None)]
 #[command(version = "0.1.0")]
@@ -138,7 +138,7 @@ pub struct App {
     #[arg(
         long,
         short,
-        help = "Emit Envy logs to stdout. Useful for debugging. But may spoil pipes.",
+        help = "Emit Envyr logs to stdout. Useful for debugging. But may spoil pipes.",
         default_value_t = false
     )]
     verbose: bool,
@@ -159,8 +159,8 @@ fn setup_logging(verbose: bool) -> Result<()> {
     Ok(())
 }
 
-fn get_alias_config(envy_root: PathBuf, alias: String) -> Option<RunConfig> {
-    let aliases = meta::load_aliases(&envy_root);
+fn get_alias_config(envyr_root: PathBuf, alias: String) -> Option<RunConfig> {
+    let aliases = meta::load_aliases(&envyr_root);
     if aliases.is_err() {
         debug!("No aliases found.");
         return None;
@@ -170,13 +170,13 @@ fn get_alias_config(envy_root: PathBuf, alias: String) -> Option<RunConfig> {
 }
 
 fn fetch(
-    envy_root: PathBuf,
+    envyr_root: PathBuf,
     project_root: &str,
     tag: &str,
     refresh: bool,
     subdir: Option<String>,
 ) -> Result<PathBuf> {
-    let p_fetcher = fetcher::get_fetcher(project_root, envy_root)?;
+    let p_fetcher = fetcher::get_fetcher(project_root, envyr_root)?;
     let mut path = p_fetcher.fetch(project_root, tag, refresh)?;
     if let Some(subdir) = subdir {
         path = path.join(subdir);
@@ -190,7 +190,7 @@ fn main() -> Result<()> {
 
     // TODO: Make this configurable later
     let homedir = home::home_dir().unwrap();
-    let envy_root = homedir.join(".envy");
+    let envyr_root = homedir.join(".envyr");
 
     setup_logging(app.verbose)?;
 
@@ -201,7 +201,7 @@ fn main() -> Result<()> {
             global_opts,
         } => {
             let path = fetch(
-                envy_root,
+                envyr_root,
                 &project_root,
                 global_opts.tag.unwrap_or("latest".to_string()).as_str(),
                 global_opts.refresh,
@@ -226,12 +226,12 @@ fn main() -> Result<()> {
                 "Running {:?} executor with autogen={}, fs_map:{:?}, port_map:{:?}, overrides:{:?} and args: {:?}",
                 executor, autogen, fs_map, port_map, overrides, args
             );
-            if let Some(mut config) = get_alias_config(envy_root.clone(), project_root.clone()) {
+            if let Some(mut config) = get_alias_config(envyr_root.clone(), project_root.clone()) {
                 debug!("Found alias config: {:?}", config);
                 if !args.is_empty() {
                     config.args = args;
                 }
-                run(&envy_root, config)?;
+                run(&envyr_root, config)?;
                 return Ok(()); // Early return if alias is found
             };
             let tag = global_opts.tag.unwrap_or("latest".to_string());
@@ -248,14 +248,14 @@ fn main() -> Result<()> {
                 overrides,
                 args,
             };
-            run(&envy_root, config.clone())?;
+            run(&envyr_root, config.clone())?;
             if let Some(alias) = alias {
-                meta::store_alias(&envy_root, alias, config)?;
+                meta::store_alias(&envyr_root, alias, config)?;
             }
         }
         Command::Alias { subcmd } => match subcmd {
             AliasSubcommand::List => {
-                let aliases = meta::load_aliases(&envy_root)?;
+                let aliases = meta::load_aliases(&envyr_root)?;
                 if aliases.is_empty() {
                     println!("No aliases found.");
                     return Ok(());
@@ -265,7 +265,7 @@ fn main() -> Result<()> {
                 }
             }
             AliasSubcommand::Delete { name } => {
-                meta::remove_alias(&envy_root, name)?;
+                meta::remove_alias(&envyr_root, name)?;
             }
         },
     }
@@ -277,7 +277,7 @@ fn main() -> Result<()> {
 pub struct RunConfig {
     project_root: String,
     sub_dir: Option<String>,
-    executor: envy::meta::Executors,
+    executor: envyr::meta::Executors,
     refresh: bool,
     autogen: bool,
     tag: String,
@@ -288,24 +288,24 @@ pub struct RunConfig {
     args: Vec<String>,
 }
 
-fn run(envy_root: &Path, config: RunConfig) -> Result<()> {
+fn run(envyr_root: &Path, config: RunConfig) -> Result<()> {
     let canon_path = fetch(
-        envy_root.to_path_buf(),
+        envyr_root.to_path_buf(),
         &config.project_root,
         config.tag.as_str(),
         config.refresh,
         config.sub_dir,
     )?;
     if config.autogen {
-        let pack_builder = envy::package::Pack::builder(&canon_path)?;
+        let pack_builder = envyr::package::Pack::builder(&canon_path)?;
         let pack_builder = override_builder_opts(config.overrides, pack_builder);
         let pack = pack_builder.build()?;
-        let generator = envy::meta::Generator::new(pack);
+        let generator = envyr::meta::Generator::new(pack);
         generator.generate(&canon_path)?;
     }
     match config.executor {
-        envy::meta::Executors::Docker => {
-            envy::docker::run(
+        envyr::meta::Executors::Docker => {
+            envyr::docker::run(
                 &canon_path,
                 config.refresh,
                 config.tag,
@@ -315,25 +315,25 @@ fn run(envy_root: &Path, config: RunConfig) -> Result<()> {
                 config.args,
             )?;
         }
-        envy::meta::Executors::Nix => todo!(),
-        envy::meta::Executors::Native => todo!(),
+        envyr::meta::Executors::Nix => todo!(),
+        envyr::meta::Executors::Native => todo!(),
     }
     Ok(())
 }
 
 fn generate(canon_path: PathBuf, args: OverrideOpts) -> Result<()> {
-    let pack_builder = envy::package::Pack::builder(&canon_path)?;
+    let pack_builder = envyr::package::Pack::builder(&canon_path)?;
     let pack_builder = override_builder_opts(args, pack_builder);
     let pack = pack_builder.build()?;
-    let generator = envy::meta::Generator::new(pack);
+    let generator = envyr::meta::Generator::new(pack);
     generator.generate(&canon_path)?;
     Ok(())
 }
 
 fn override_builder_opts(
     args: OverrideOpts,
-    mut pack_builder: envy::package::PackBuilder,
-) -> envy::package::PackBuilder {
+    mut pack_builder: envyr::package::PackBuilder,
+) -> envyr::package::PackBuilder {
     // Overwrite global opts if needed
     if let Some(name) = args.name {
         pack_builder = pack_builder.name(name);

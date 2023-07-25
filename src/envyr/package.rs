@@ -28,14 +28,14 @@ pub struct Pack {
 impl Pack {
     #[allow(dead_code)]
     pub fn load(project_root: &Path) -> Result<Self> {
-        let meta_file = project_root.join(".envy").join("meta.json");
+        let meta_file = project_root.join(".envyr").join("meta.json");
         let meta_json = std::fs::read_to_string(meta_file)?;
         let pack: Pack = serde_json::from_str(&meta_json)?;
         Ok(pack)
     }
 
     pub fn save(&self, project_root: &Path) -> Result<()> {
-        let meta_file = project_root.join(".envy").join("meta.json");
+        let meta_file = project_root.join(".envyr").join("meta.json");
         let meta_json = serde_json::to_string_pretty(&self)?;
         std::fs::write(meta_file, meta_json)?;
         Ok(())

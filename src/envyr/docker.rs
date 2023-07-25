@@ -127,7 +127,7 @@ fn get_image_name(project_root: &Path, tag: String) -> Result<String> {
     let mut name_str = String::from(project_root.to_str().unwrap());
     name_str = name_str.replace(['/', '.'], "-");
     Ok(format!(
-        "envy{}:{}",
+        "envyr{}:{}",
         name_str.to_lowercase(),
         tag.to_lowercase()
     ))
@@ -155,7 +155,7 @@ fn build_local(project_root: &Path, tag: String) -> Result<String> {
 
     let image = get_image_name(project_root, tag)?;
 
-    let dockerfile_path = project_root.join(".envy").join("Dockerfile");
+    let dockerfile_path = project_root.join(".envyr").join("Dockerfile");
     debug!("Building local docker image: {}", image);
     let mut popen_conf = PopenConfig {
         stdout: subprocess::Redirection::Pipe,

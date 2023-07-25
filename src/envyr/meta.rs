@@ -19,7 +19,7 @@ impl Generator {
     }
 
     pub fn generate_meta_dir(&self, project_root: &Path) -> Result<()> {
-        let meta_dir = project_root.join(".envy");
+        let meta_dir = project_root.join(".envyr");
         if !meta_dir.exists() {
             std::fs::create_dir(&meta_dir)?;
         }
@@ -29,7 +29,7 @@ impl Generator {
     pub fn generate_docker(&self, project_root: &Path) -> Result<()> {
         let dockerfile = docker::generate_dockerfile(&self.pack, project_root)?;
         let dockerignore = docker::generate_docker_ignore(&self.pack)?;
-        let dockerfile_path = project_root.join(".envy").join("Dockerfile");
+        let dockerfile_path = project_root.join(".envyr").join("Dockerfile");
         let dockerignore_path = project_root.join(".dockerignore");
         std::fs::write(dockerfile_path, dockerfile)?;
         std::fs::write(dockerignore_path, dockerignore)?;
@@ -72,8 +72,8 @@ pub enum Executors {
 
 pub type AliasMap = std::collections::HashMap<String, RunConfig>;
 
-pub fn load_aliases(envy_root: &Path) -> Result<AliasMap> {
-    let aliases_f = envy_root.join("aliases.json");
+pub fn load_aliases(envyr_root: &Path) -> Result<AliasMap> {
+    let aliases_f = envyr_root.join("aliases.json");
     // If the file doesn't exist, create it
     if !aliases_f.exists() {
         let aliases = serde_json::to_string_pretty(&AliasMap::new())?;
@@ -89,19 +89,19 @@ pub fn load_aliases(envy_root: &Path) -> Result<AliasMap> {
     Ok(aliases)
 }
 
-pub fn remove_alias(envy_root: &Path, name: String) -> Result<()> {
-    let mut aliases = load_aliases(envy_root)?;
+pub fn remove_alias(envyr_root: &Path, name: String) -> Result<()> {
+    let mut aliases = load_aliases(envyr_root)?;
     aliases.remove(&name);
-    let aliases_f = envy_root.join("aliases.json");
+    let aliases_f = envyr_root.join("aliases.json");
     let aliases = serde_json::to_string_pretty(&aliases)?;
     std::fs::write(aliases_f, aliases)?;
     Ok(())
 }
 
-pub fn store_alias(envy_root: &Path, name: String, conf: RunConfig) -> Result<()> {
-    let mut aliases = load_aliases(envy_root)?;
+pub fn store_alias(envyr_root: &Path, name: String, conf: RunConfig) -> Result<()> {
+    let mut aliases = load_aliases(envyr_root)?;
     aliases.insert(name, conf);
-    let aliases_f = envy_root.join("aliases.json");
+    let aliases_f = envyr_root.join("aliases.json");
     let aliases = serde_json::to_string_pretty(&aliases)?;
     std::fs::write(aliases_f, aliases)?;
     Ok(())

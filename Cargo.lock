@@ -161,7 +161,7 @@ dependencies = [
 ]
 
 [[package]]
-name = "envy"
+name = "envyr"
 version = "0.1.0"
 dependencies = [
  "anyhow",

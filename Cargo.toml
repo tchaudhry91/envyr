@@ -1,11 +1,11 @@
 [package]
-name = "envy"
-description = "Envy is a tool to automagically package an application and run it in a sandboxed environment."
-doucmentation = "https://github.com/tchaudhry91/envy"
-homepage = "https://github.com/tchaudhry91/envy"
+name = "envyr"
+description = "Envyr is a tool to automagically package an application and run it in a sandboxed environment."
+doucmentation = "https://github.com/tchaudhry91/envyr"
+homepage = "https://github.com/tchaudhry91/envyr"
 license = "Apache-2.0"
 categories = ["command-line-utility", "sandbox", "scripts", "packages", "docker"]
-repository = "https://github.com/tchaudhry91/envy"
+repository = "https://github.com/tchaudhry91/envyr"
 version = "0.1.0"
 edition = "2021"
 
