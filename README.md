@@ -136,7 +136,7 @@ The generate command is generally meant to be used by authors who can commit the
 You can generate aliases for common run commands to make them more ergonomic for regular use.
 Pass the `--alias` flag to create a new alias on a successful run of a particular package.
 ```
-$envyr run --alias sample --env-map MYVAR --autogen git@github.com:tchaudhry91/python-sample-script.git -- https://blog.tux-sudo.com
+$envyr run --alias sample --env-ma=MYVAR --autogen git@github.com:tchaudhry91/python-sample-script.git -- https://blog.tux-sudo.com
 
 ```
 This will store the above command as an alias called `sample` which can run as follows:
