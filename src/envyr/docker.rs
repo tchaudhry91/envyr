@@ -83,7 +83,10 @@ pub fn run(
         command.split_whitespace().collect::<Vec<&str>>().as_slice(),
         PopenConfig::default(),
     )?;
-    p.wait()?;
+    let status = p.wait()?;
+    if !status.success() {
+        return Err(anyhow::anyhow!("Non-zero exit code"));
+    }
     Ok(())
 }
 
