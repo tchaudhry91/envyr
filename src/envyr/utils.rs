@@ -94,12 +94,17 @@ pub fn detect_main_node(project_root: &Path) -> Option<PathBuf> {
 
 pub fn create_requirements_txt(project_root: &Path) -> Result<()> {
     // Assume pipreqs exists
-    let output = std::process::Command::new("pipreqs")
-        .arg(project_root)
+    let output = std::process::Command::new("envyr")
+        .arg("run")
+        .arg(format!("--fs-map={}:/envyr/target", project_root.display()))
+        .arg("git@github.com:tchaudhry91/pipreqs-wrap.git")
+        .arg("--")
+        .arg("/envyr/target")
         .output()?;
     if !output.status.success() {
         return Err(anyhow::anyhow!(
-            "Failed to create requirements.txt: {}",
+            "Failed to create requirements.txt: {}:{}",
+            String::from_utf8(output.stdout)?,
             String::from_utf8(output.stderr)?
         ));
     }

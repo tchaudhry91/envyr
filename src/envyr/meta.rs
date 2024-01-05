@@ -40,7 +40,7 @@ impl Generator {
         if !utils::check_requirements_txt(project_root) {
             // Attempt to generate with pipreqs
             if utils::create_requirements_txt(project_root).is_err() {
-                log::warn!("No requirements.txt found. Unable to generate using pipreqs. You may need to install pipreqs separately.");
+                log::warn!("No requirements.txt found. Unable to generate using pipreqs.");
             }
         }
         Ok(())
