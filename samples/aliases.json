@@ -1,32 +1,14 @@
 {
-  "flask-example": {
-    "project_root": "git@github.com:jainamoswal/Flask-Example.git",
+  "detect-pkgs": {
+    "project_root": "git@github.com:tchaudhry91/detect-pkgs.git",
     "sub_dir": null,
     "executor": "Docker",
     "refresh": false,
     "autogen": true,
     "tag": "latest",
-    "fs_map": [],
-    "port_map": [
-      "6969:6969"
+    "fs_map": [
+      "/Users/tchaudhry/Workspace/script.sh:/envyr/app/script.sh"
     ],
-    "env_map": [],
-    "overrides": {
-      "name": null,
-      "interpreter": null,
-      "entrypoint": null,
-      "ptype": null
-    },
-    "args": []
-  },
-  "speedtest-cli": {
-    "project_root": "git@github.com:sivel/speedtest-cli",
-    "sub_dir": null,
-    "executor": "Docker",
-    "refresh": false,
-    "autogen": true,
-    "tag": "latest",
-    "fs_map": [],
     "port_map": [],
     "env_map": [],
     "overrides": {
@@ -36,47 +18,6 @@
       "ptype": null
     },
     "args": []
-  },
-  "download-html": {
-    "project_root": "git@github.com:tchaudhry91/python-html-downloader.git",
-    "sub_dir": null,
-    "executor": "Docker",
-    "refresh": false,
-    "autogen": true,
-    "tag": "latest",
-    "fs_map": [],
-    "port_map": [],
-    "env_map": [],
-    "overrides": {
-      "name": null,
-      "interpreter": null,
-      "entrypoint": null,
-      "ptype": null
-    },
-    "args": [
-      "https://example.com"
-    ]
-  },
-  "http-server": {
-    "project_root": "git@github.com:spadin/simple-express-static-server.git",
-    "sub_dir": null,
-    "executor": "Docker",
-    "refresh": false,
-    "autogen": true,
-    "tag": "latest",
-    "fs_map": [],
-    "port_map": ["4567:4567"],
-    "env_map": [
-    ],
-    "overrides": {
-      "name": null,
-      "interpreter": null,
-      "entrypoint": "start.js",
-      "ptype": null
-    },
-    "args": [
-      "/var/www"
-    ]
   },
   "get-ec2": {
     "project_root": "git@github.com:tchaudhry91/getEC2.git",
@@ -102,6 +43,86 @@
     "args": [
       "eu-west-1"
     ]
+  },
+  "download-html": {
+    "project_root": "git@github.com:tchaudhry91/python-html-downloader.git",
+    "sub_dir": null,
+    "executor": "Docker",
+    "refresh": false,
+    "autogen": true,
+    "tag": "latest",
+    "fs_map": [],
+    "port_map": [],
+    "env_map": [],
+    "overrides": {
+      "name": null,
+      "interpreter": null,
+      "entrypoint": null,
+      "ptype": null
+    },
+    "args": [
+      "https://example.com"
+    ]
+  },
+  "speedtest-cli": {
+    "project_root": "git@github.com:sivel/speedtest-cli",
+    "sub_dir": null,
+    "executor": "Docker",
+    "refresh": false,
+    "autogen": true,
+    "tag": "latest",
+    "fs_map": [],
+    "port_map": [],
+    "env_map": [],
+    "overrides": {
+      "name": null,
+      "interpreter": null,
+      "entrypoint": null,
+      "ptype": null
+    },
+    "args": []
+  },
+  "http-server": {
+    "project_root": "git@github.com:spadin/simple-express-static-server.git",
+    "sub_dir": null,
+    "executor": "Docker",
+    "refresh": false,
+    "autogen": true,
+    "tag": "latest",
+    "fs_map": [],
+    "port_map": [
+      "4567:4567"
+    ],
+    "env_map": [],
+    "overrides": {
+      "name": null,
+      "interpreter": null,
+      "entrypoint": "start.js",
+      "ptype": null
+    },
+    "args": [
+      "/var/www"
+    ]
+  },
+  "flask-example": {
+    "project_root": "git@github.com:jainamoswal/Flask-Example.git",
+    "sub_dir": null,
+    "executor": "Docker",
+    "refresh": false,
+    "autogen": true,
+    "tag": "latest",
+    "fs_map": [],
+    "port_map": [
+      "6969:6969"
+    ],
+    "env_map": [],
+    "overrides": {
+      "name": null,
+      "interpreter": null,
+      "entrypoint": null,
+      "ptype": null
+    },
+    "args": []
   },
   "generate-heading": {
     "project_root": "git@github.com:akkana/scripts.git",
