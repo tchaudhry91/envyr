@@ -12,6 +12,7 @@ pub const PRIORITY_LAST: u8 = 3;
 
 use super::package::PType;
 use anyhow::Result;
+use serde::{Deserialize, Serialize};
 use serde_json::Value;
 
 // Checks if the file contains a python main.
@@ -90,6 +91,24 @@ pub fn detect_main_node(project_root: &Path) -> Option<PathBuf> {
         }
         Err(_) => None,
     }
+}
+
+#[derive(Serialize, Deserialize)]
+struct PackDeps {
+    deps: Vec<String>,
+}
+
+pub fn check_bash_dependencies(script_file: &Path) -> Result<Vec<String>> {
+    let output = std::process::Command::new("envyr")
+        .arg("run")
+        .arg(format!(
+            "--fs-map={}:/envyr/app/script.sh",
+            script_file.display()
+        ))
+        .arg("git@github.com:tchaudhry91/detect-pkgs.git")
+        .output()?;
+    let deps: PackDeps = serde_json::from_slice(output.stdout.as_slice())?;
+    Ok(deps.deps)
 }
 
 pub fn create_requirements_txt(project_root: &Path) -> Result<()> {

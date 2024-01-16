@@ -134,12 +134,24 @@ impl PackBuilder {
                 ));
             }
         }
+
+        let mut deps = vec![];
+
+        if let Some(interp) = self.interpreter.clone() {
+            if let Some(entryp) = self.entrypoint.clone() {
+                if interp.contains("bash") {
+                    deps = utils::check_bash_dependencies(&self.project_root.clone().join(entryp))
+                        .unwrap_or_default();
+                }
+            }
+        }
+
         Ok(Pack {
             name: self.name.unwrap_or_default(),
             interpreter: self.interpreter.unwrap_or_default(),
             entrypoint: self.entrypoint.unwrap_or_default(),
             ptype: self.ptype,
-            deps: vec![],
+            deps,
         })
     }
 }
