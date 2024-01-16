@@ -1,0 +1,129 @@
+{
+  "flask-example": {
+    "project_root": "git@github.com:jainamoswal/Flask-Example.git",
+    "sub_dir": null,
+    "executor": "Docker",
+    "refresh": false,
+    "autogen": true,
+    "tag": "latest",
+    "fs_map": [],
+    "port_map": [
+      "6969:6969"
+    ],
+    "env_map": [],
+    "overrides": {
+      "name": null,
+      "interpreter": null,
+      "entrypoint": null,
+      "ptype": null
+    },
+    "args": []
+  },
+  "speedtest-cli": {
+    "project_root": "git@github.com:sivel/speedtest-cli",
+    "sub_dir": null,
+    "executor": "Docker",
+    "refresh": false,
+    "autogen": true,
+    "tag": "latest",
+    "fs_map": [],
+    "port_map": [],
+    "env_map": [],
+    "overrides": {
+      "name": null,
+      "interpreter": null,
+      "entrypoint": null,
+      "ptype": null
+    },
+    "args": []
+  },
+  "download-html": {
+    "project_root": "git@github.com:tchaudhry91/python-html-downloader.git",
+    "sub_dir": null,
+    "executor": "Docker",
+    "refresh": false,
+    "autogen": true,
+    "tag": "latest",
+    "fs_map": [],
+    "port_map": [],
+    "env_map": [],
+    "overrides": {
+      "name": null,
+      "interpreter": null,
+      "entrypoint": null,
+      "ptype": null
+    },
+    "args": [
+      "https://example.com"
+    ]
+  },
+  "http-server": {
+    "project_root": "git@github.com:spadin/simple-express-static-server.git",
+    "sub_dir": null,
+    "executor": "Docker",
+    "refresh": false,
+    "autogen": true,
+    "tag": "latest",
+    "fs_map": [],
+    "port_map": ["4567:4567"],
+    "env_map": [
+    ],
+    "overrides": {
+      "name": null,
+      "interpreter": null,
+      "entrypoint": "start.js",
+      "ptype": null
+    },
+    "args": [
+      "/var/www"
+    ]
+  },
+  "get-ec2": {
+    "project_root": "git@github.com:tchaudhry91/getEC2.git",
+    "sub_dir": null,
+    "executor": "Docker",
+    "refresh": true,
+    "autogen": true,
+    "tag": "latest",
+    "fs_map": [],
+    "port_map": [],
+    "env_map": [
+      "AWS_ACCESS_KEY_ID",
+      "AWS_SECRET_ACCESS_KEY",
+      "AWS_SESSION_TOKEN",
+      "AWS_SECURITY_TOKEN"
+    ],
+    "overrides": {
+      "name": null,
+      "interpreter": null,
+      "entrypoint": null,
+      "ptype": null
+    },
+    "args": [
+      "eu-west-1"
+    ]
+  },
+  "generate-heading": {
+    "project_root": "git@github.com:akkana/scripts.git",
+    "sub_dir": "mapping",
+    "executor": "Docker",
+    "refresh": false,
+    "autogen": true,
+    "tag": "latest",
+    "fs_map": [],
+    "port_map": [],
+    "env_map": [],
+    "overrides": {
+      "name": null,
+      "interpreter": null,
+      "entrypoint": "greatcircle.py",
+      "ptype": null
+    },
+    "args": [
+      "28.7041",
+      "77.1025",
+      "19.0760",
+      "72.8777"
+    ]
+  }
+}
