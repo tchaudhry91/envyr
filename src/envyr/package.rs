@@ -275,9 +275,10 @@ fn detect_possible_entrypoint(entry: &DirEntry) -> Option<(PathBuf, String, u8)>
     if let Some(interpreter) =
         utils::check_shebang_file(&entry.path().to_path_buf()).unwrap_or(None)
     {
+        let interp_trimmed = interpreter.trim();
         return Some((
             entry.path().to_path_buf(),
-            interpreter,
+            interp_trimmed.to_string(),
             utils::PRIORITY_LIKELY,
         ));
     }
