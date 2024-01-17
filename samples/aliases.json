@@ -1,23 +1,26 @@
 {
-  "detect-pkgs": {
-    "project_root": "git@github.com:tchaudhry91/detect-pkgs.git",
-    "sub_dir": null,
+  "generate-heading": {
+    "project_root": "git@github.com:akkana/scripts.git",
+    "sub_dir": "mapping",
     "executor": "Docker",
     "refresh": false,
     "autogen": true,
     "tag": "latest",
-    "fs_map": [
-      "/Users/tchaudhry/Workspace/script.sh:/envyr/app/script.sh"
-    ],
+    "fs_map": [],
     "port_map": [],
     "env_map": [],
     "overrides": {
       "name": null,
       "interpreter": null,
-      "entrypoint": null,
+      "entrypoint": "greatcircle.py",
       "ptype": null
     },
-    "args": []
+    "args": [
+      "28.7041",
+      "77.1025",
+      "19.0760",
+      "72.8777"
+    ]
   },
   "get-ec2": {
     "project_root": "git@github.com:tchaudhry91/getEC2.git",
@@ -64,14 +67,16 @@
       "https://example.com"
     ]
   },
-  "speedtest-cli": {
-    "project_root": "git@github.com:sivel/speedtest-cli",
+  "detect-pkgs": {
+    "project_root": "git@github.com:tchaudhry91/detect-pkgs.git",
     "sub_dir": null,
     "executor": "Docker",
     "refresh": false,
     "autogen": true,
     "tag": "latest",
-    "fs_map": [],
+    "fs_map": [
+      "/Users/tchaudhry/Workspace/script.sh:/envyr/app/script.sh"
+    ],
     "port_map": [],
     "env_map": [],
     "overrides": {
@@ -124,9 +129,9 @@
     },
     "args": []
   },
-  "generate-heading": {
-    "project_root": "git@github.com:akkana/scripts.git",
-    "sub_dir": "mapping",
+  "curl-jq": {
+    "project_root": "git@github.com:tchaudhry91/curl-jq-ex.git",
+    "sub_dir": null,
     "executor": "Docker",
     "refresh": false,
     "autogen": true,
@@ -137,14 +142,27 @@
     "overrides": {
       "name": null,
       "interpreter": null,
-      "entrypoint": "greatcircle.py",
+      "entrypoint": null,
       "ptype": null
     },
-    "args": [
-      "28.7041",
-      "77.1025",
-      "19.0760",
-      "72.8777"
-    ]
+    "args": []
+  },
+  "speedtest-cli": {
+    "project_root": "git@github.com:sivel/speedtest-cli",
+    "sub_dir": null,
+    "executor": "Docker",
+    "refresh": false,
+    "autogen": true,
+    "tag": "latest",
+    "fs_map": [],
+    "port_map": [],
+    "env_map": [],
+    "overrides": {
+      "name": null,
+      "interpreter": null,
+      "entrypoint": null,
+      "ptype": null
+    },
+    "args": []
   }
 }
