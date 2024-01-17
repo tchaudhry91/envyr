@@ -131,7 +131,7 @@ enum Command {
 #[command(name = "envyr")]
 #[command(author = "Tanmay Chaudhry <tanmay.chaudhry@gmail.com")]
 #[command(about="A tool to automagically create 'executable' packages for your scripts.", long_about=None)]
-#[command(version = "0.1.5")]
+#[command(version = "0.1.6")]
 pub struct App {
     #[clap(subcommand)]
     command: Command,
