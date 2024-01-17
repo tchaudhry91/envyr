@@ -1,5 +1,6 @@
 use std::env;
 use std::path::Path;
+use std::time::Instant;
 
 use anyhow::Result;
 use handlebars::Handlebars;
@@ -57,6 +58,7 @@ pub fn run(
     port_map: Vec<String>,
     env_map: Vec<String>,
     args: Vec<String>,
+    start: Instant,
 ) -> Result<()> {
     let executor = get_docker_executor()?;
 
@@ -79,6 +81,7 @@ pub fn run(
         args.join(" ")
     );
     debug!("Running command: {}", command);
+    debug!("Time Elapsed in Setup: {:?}", start.elapsed());
     let mut p = Popen::create(
         command.split_whitespace().collect::<Vec<&str>>().as_slice(),
         PopenConfig::default(),

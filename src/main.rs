@@ -6,6 +6,7 @@ use envyr::adapters::fetcher;
 use log::debug;
 use serde::{Deserialize, Serialize};
 use std::path::{Path, PathBuf};
+use std::time::Instant;
 
 use crate::envyr::meta;
 
@@ -186,6 +187,7 @@ fn fetch(
 }
 
 fn main() -> Result<()> {
+    let start = Instant::now();
     let app = App::parse();
 
     // TODO: Make this configurable later
@@ -231,7 +233,8 @@ fn main() -> Result<()> {
                 if !args.is_empty() {
                     config.args = args;
                 }
-                run(&envyr_root, config)?;
+                config.refresh = global_opts.refresh;
+                run(&envyr_root, config, start)?;
                 return Ok(()); // Early return if alias is found
             };
             let tag = global_opts.tag.unwrap_or("latest".to_string());
@@ -248,7 +251,7 @@ fn main() -> Result<()> {
                 overrides,
                 args,
             };
-            run(&envyr_root, config.clone())?;
+            run(&envyr_root, config.clone(), start)?;
             if let Some(alias) = alias {
                 meta::store_alias(&envyr_root, alias, config)?;
             }
@@ -288,7 +291,7 @@ pub struct RunConfig {
     args: Vec<String>,
 }
 
-fn run(envyr_root: &Path, config: RunConfig) -> Result<()> {
+fn run(envyr_root: &Path, config: RunConfig, start: Instant) -> Result<()> {
     let canon_path = fetch(
         envyr_root.to_path_buf(),
         &config.project_root,
@@ -313,6 +316,7 @@ fn run(envyr_root: &Path, config: RunConfig) -> Result<()> {
                 config.port_map,
                 config.env_map,
                 config.args,
+                start,
             )?;
         }
         envyr::meta::Executors::Nix => todo!(),
