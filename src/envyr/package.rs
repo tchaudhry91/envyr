@@ -139,9 +139,11 @@ impl PackBuilder {
 
         if let Some(interp) = self.interpreter.clone() {
             if let Some(entryp) = self.entrypoint.clone() {
+                debug!("Checking for available os-level dependencies");
                 if interp.contains("bash") {
                     deps = utils::check_bash_dependencies(&self.project_root.clone().join(entryp))
                         .unwrap_or_default();
+                    debug!("Found deps after analysis: {:?}", deps);
                 }
             }
         }
