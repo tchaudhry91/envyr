@@ -121,6 +121,11 @@ pub fn create_requirements_txt(project_root: &Path) -> Result<()> {
         .arg("/envyr/target")
         .output()?;
     if !output.status.success() {
+        log::warn!(
+            "Failed to create requirements.txt: {}:{}",
+            String::from_utf8(output.stdout.clone())?,
+            String::from_utf8(output.stderr.clone())?
+        );
         return Err(anyhow::anyhow!(
             "Failed to create requirements.txt: {}:{}",
             String::from_utf8(output.stdout)?,

@@ -53,6 +53,7 @@ pub fn get_docker_executor() -> Result<String> {
 pub fn run(
     project_root: &Path,
     force_rebuild: bool,
+    interactive: bool,
     tag: String,
     fs_map: Vec<String>,
     port_map: Vec<String>,
@@ -71,9 +72,15 @@ pub fn run(
         image = build_local(project_root, tag)?;
     }
 
+    let mut interactive_mode = "";
+    if interactive {
+        interactive_mode = "-it";
+    }
+
     let command = format!(
-        "{} run -it {} {} {} --rm {} {}",
+        "{} run {} {} {} {} --rm {} {}",
         executor,
+        interactive_mode,
         get_port_map_str(port_map),
         get_fs_map_str(fs_map),
         get_env_map_str(env_map),

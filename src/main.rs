@@ -110,6 +110,13 @@ enum Command {
         )]
         autogen: bool,
 
+        #[clap(
+            long,
+            default_value_t = false,
+            help = "Run the executor in interactive mode (allocate a tty)."
+        )]
+        interactive: bool,
+
         #[clap(long, num_args = 0.., help ="Mount the given directory as a volume. Format: host_dir:container_dir. Allows multiples. Only applicable on Docker Executor.")]
         fs_map: Vec<String>,
 
@@ -131,7 +138,7 @@ enum Command {
 #[command(name = "envyr")]
 #[command(author = "Tanmay Chaudhry <tanmay.chaudhry@gmail.com")]
 #[command(about="A tool to automagically create 'executable' packages for your scripts.", long_about=None)]
-#[command(version = "0.1.6")]
+#[command(version = "0.1.8")]
 pub struct App {
     #[clap(subcommand)]
     command: Command,
@@ -216,6 +223,7 @@ fn main() -> Result<()> {
             project_root,
             global_opts,
             executor,
+            interactive,
             overrides,
             autogen,
             args,
@@ -241,6 +249,7 @@ fn main() -> Result<()> {
             let config = RunConfig {
                 project_root,
                 executor,
+                interactive,
                 refresh: global_opts.refresh,
                 autogen,
                 tag,
@@ -281,6 +290,7 @@ pub struct RunConfig {
     project_root: String,
     sub_dir: Option<String>,
     executor: envyr::meta::Executors,
+    interactive: bool,
     refresh: bool,
     autogen: bool,
     tag: String,
@@ -311,6 +321,7 @@ fn run(envyr_root: &Path, config: RunConfig, start: Instant) -> Result<()> {
             envyr::docker::run(
                 &canon_path,
                 config.refresh,
+                config.interactive,
                 config.tag,
                 config.fs_map,
                 config.port_map,

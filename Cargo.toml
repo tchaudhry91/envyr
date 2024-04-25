@@ -6,7 +6,7 @@ homepage = "https://github.com/tchaudhry91/envyr"
 license = "Apache-2.0"
 categories = ["command-line-utility", "sandbox", "scripts", "packages", "docker"]
 repository = "https://github.com/tchaudhry91/envyr"
-version = "0.1.7"
+version = "0.1.8"
 edition = "2021"
 
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
