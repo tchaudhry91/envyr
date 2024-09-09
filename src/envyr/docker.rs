@@ -47,7 +47,9 @@ pub fn get_docker_executor() -> Result<String> {
     } else if check_podman().is_ok() {
         return Ok("podman".to_string());
     }
-    Err(anyhow::anyhow!("Docker or Podman not found."))
+    Err(anyhow::anyhow!(
+        "Docker or Podman not found. Install one of these to get envyr working."
+    ))
 }
 
 pub fn run(
