@@ -54,6 +54,7 @@ pub fn run(
     project_root: &Path,
     force_rebuild: bool,
     interactive: bool,
+    network: Option<String>,
     tag: String,
     fs_map: Vec<String>,
     port_map: Vec<String>,
@@ -77,10 +78,16 @@ pub fn run(
         interactive_mode = "-it";
     }
 
+    let mut network_name: String = "".to_string();
+    if network.is_some() {
+        network_name = format!("--network={}", network.unwrap())
+    }
+
     let command = format!(
-        "{} run {} {} {} {} --rm {} {}",
+        "{} run {} {} {} {} {} --rm {} {}",
         executor,
         interactive_mode,
+        network_name,
         get_port_map_str(port_map),
         get_fs_map_str(fs_map),
         get_env_map_str(env_map),

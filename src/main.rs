@@ -117,6 +117,9 @@ enum Command {
         )]
         interactive: bool,
 
+        #[clap(long, help = "Supply the --network option to the underlying executor")]
+        network: Option<String>,
+
         #[clap(long, num_args = 0.., help ="Mount the given directory as a volume. Format: host_dir:container_dir. Allows multiples. Only applicable on Docker Executor.")]
         fs_map: Vec<String>,
 
@@ -138,7 +141,7 @@ enum Command {
 #[command(name = "envyr")]
 #[command(author = "Tanmay Chaudhry <tanmay.chaudhry@gmail.com")]
 #[command(about="A tool to automagically create 'executable' packages for your scripts.", long_about=None)]
-#[command(version = "0.1.8")]
+#[command(version = "0.1.9")]
 pub struct App {
     #[clap(subcommand)]
     command: Command,
@@ -224,6 +227,7 @@ fn main() -> Result<()> {
             global_opts,
             executor,
             interactive,
+            network,
             overrides,
             autogen,
             args,
@@ -250,6 +254,7 @@ fn main() -> Result<()> {
                 project_root,
                 executor,
                 interactive,
+                network,
                 refresh: global_opts.refresh,
                 autogen,
                 tag,
@@ -291,6 +296,7 @@ pub struct RunConfig {
     sub_dir: Option<String>,
     executor: envyr::meta::Executors,
     interactive: bool,
+    network: Option<String>,
     refresh: bool,
     autogen: bool,
     tag: String,
@@ -322,6 +328,7 @@ fn run(envyr_root: &Path, config: RunConfig, start: Instant) -> Result<()> {
                 &canon_path,
                 config.refresh,
                 config.interactive,
+                config.network,
                 config.tag,
                 config.fs_map,
                 config.port_map,
