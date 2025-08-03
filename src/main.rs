@@ -128,7 +128,7 @@ enum Command {
         #[clap(long, num_args = 0.., help="Environment variables to pass through, leave value empty to pass through the value from the current environment. Format: 'key=value' or 'key' (passwthrough). Allows multiples.")]
         env_map: Vec<String>,
 
-        #[clap(long, help = "Timeout for container execution in seconds. Docker will send SIGTERM then SIGKILL after this duration.")]
+        #[clap(long, help = "Timeout for container execution in seconds. Container process will be terminated after this duration.")]
         timeout: Option<u32>,
 
         #[clap(flatten)]

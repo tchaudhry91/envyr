@@ -84,21 +84,11 @@ pub fn run(
         network_name = format!("--network={}", network.unwrap())
     }
 
-    let mut timeout_flag: String = "".to_string();
-    if let Some(timeout_secs) = timeout {
-        if executor == "docker" {
-            timeout_flag = format!("--timeout={}", timeout_secs);
-        } else {
-            debug!("Warning: Timeout flag is only supported with Docker executor, not with {}", executor);
-        }
-    }
-
     let command = format!(
-        "{} run {} {} {} {} {} {} --rm {} {}",
+        "{} run {} {} {} {} {} --rm {} {}",
         executor,
         interactive_mode,
         network_name,
-        timeout_flag,
         get_port_map_str(port_map),
         get_fs_map_str(fs_map),
         get_env_map_str(env_map),
@@ -111,7 +101,20 @@ pub fn run(
         command.split_whitespace().collect::<Vec<&str>>().as_slice(),
         PopenConfig::default(),
     )?;
-    let status = p.wait()?;
+    
+    let status = if let Some(timeout_secs) = timeout {
+        debug!("Running with timeout: {} seconds", timeout_secs);
+        match p.wait_timeout(std::time::Duration::from_secs(timeout_secs as u64))? {
+            Some(status) => status,
+            None => {
+                debug!("Container execution timed out after {} seconds", timeout_secs);
+                p.terminate()?;
+                return Err(anyhow::anyhow!("Container execution timed out after {} seconds", timeout_secs));
+            }
+        }
+    } else {
+        p.wait()?
+    };
     if !status.success() {
         return Err(anyhow::anyhow!("Non-zero exit code"));
     }
