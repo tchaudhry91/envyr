@@ -21,7 +21,6 @@ struct GlobalOpts {
 
     #[arg(
         long,
-        short,
         default_value = "latest",
         help = "The tag of the package to run. Accepts git tags/commits. Defaults to latest."
     )]
@@ -129,6 +128,9 @@ enum Command {
         #[clap(long, num_args = 0.., help="Environment variables to pass through, leave value empty to pass through the value from the current environment. Format: 'key=value' or 'key' (passwthrough). Allows multiples.")]
         env_map: Vec<String>,
 
+        #[clap(long, help = "Timeout for container execution in seconds. Docker will send SIGTERM then SIGKILL after this duration.")]
+        timeout: Option<u32>,
+
         #[clap(flatten)]
         overrides: OverrideOpts,
 
@@ -234,6 +236,7 @@ fn main() -> Result<()> {
             fs_map,
             env_map,
             port_map,
+            timeout,
             alias,
         } => {
             debug!(
@@ -262,6 +265,7 @@ fn main() -> Result<()> {
                 port_map,
                 sub_dir: global_opts.sub_dir,
                 env_map,
+                timeout,
                 overrides,
                 args,
             };
@@ -303,6 +307,7 @@ pub struct RunConfig {
     fs_map: Vec<String>,
     port_map: Vec<String>,
     env_map: Vec<String>,
+    timeout: Option<u32>,
     overrides: OverrideOpts,
     args: Vec<String>,
 }
@@ -333,6 +338,7 @@ fn run(envyr_root: &Path, config: RunConfig, start: Instant) -> Result<()> {
                 config.fs_map,
                 config.port_map,
                 config.env_map,
+                config.timeout,
                 config.args,
                 start,
             )?;

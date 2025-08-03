@@ -59,6 +59,7 @@ pub fn run(
     fs_map: Vec<String>,
     port_map: Vec<String>,
     env_map: Vec<String>,
+    timeout: Option<u32>,
     args: Vec<String>,
     start: Instant,
 ) -> Result<()> {
@@ -83,11 +84,21 @@ pub fn run(
         network_name = format!("--network={}", network.unwrap())
     }
 
+    let mut timeout_flag: String = "".to_string();
+    if let Some(timeout_secs) = timeout {
+        if executor == "docker" {
+            timeout_flag = format!("--timeout={}", timeout_secs);
+        } else {
+            debug!("Warning: Timeout flag is only supported with Docker executor, not with {}", executor);
+        }
+    }
+
     let command = format!(
-        "{} run {} {} {} {} {} --rm {} {}",
+        "{} run {} {} {} {} {} {} --rm {} {}",
         executor,
         interactive_mode,
         network_name,
+        timeout_flag,
         get_port_map_str(port_map),
         get_fs_map_str(fs_map),
         get_env_map_str(env_map),
