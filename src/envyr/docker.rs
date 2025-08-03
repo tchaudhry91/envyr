@@ -84,21 +84,65 @@ pub fn run(
         network_name = format!("--network={}", network.unwrap())
     }
 
-    let command = format!(
-        "{} run {} {} {} {} {} --rm {} {}",
-        executor,
-        interactive_mode,
-        network_name,
-        get_port_map_str(port_map),
-        get_fs_map_str(fs_map),
-        get_env_map_str(env_map),
-        image,
-        args.join(" ")
-    );
-    debug!("Running command: {}", command);
+    // Generate a unique container name for timeout handling
+    let container_name = if timeout.is_some() {
+        Some(format!("envyr-{}-{}", 
+            std::process::id(), 
+            std::time::SystemTime::now()
+                .duration_since(std::time::UNIX_EPOCH)
+                .unwrap()
+                .as_secs()
+        ))
+    } else {
+        None
+    };
+
+
+    // Build command parts and filter out empty strings
+    let mut cmd_parts = vec![
+        executor.as_str(),
+        "run",
+    ];
+    
+    if !interactive_mode.is_empty() {
+        cmd_parts.push(interactive_mode);
+    }
+    
+    if !network_name.is_empty() {
+        cmd_parts.push(&network_name);
+    }
+    
+    if let Some(ref name) = container_name {
+        cmd_parts.push("--name");
+        cmd_parts.push(name);
+    }
+    
+    let port_map_str = get_port_map_str(port_map);
+    if !port_map_str.is_empty() {
+        cmd_parts.extend(port_map_str.split_whitespace());
+    }
+    
+    let fs_map_str = get_fs_map_str(fs_map);
+    if !fs_map_str.is_empty() {
+        cmd_parts.extend(fs_map_str.split_whitespace());
+    }
+    
+    let env_map_str = get_env_map_str(env_map);
+    if !env_map_str.is_empty() {
+        cmd_parts.extend(env_map_str.split_whitespace());
+    }
+    
+    cmd_parts.push("--rm");
+    cmd_parts.push(&image);
+    
+    if !args.is_empty() {
+        cmd_parts.extend(args.iter().map(|s| s.as_str()));
+    }
+
+    debug!("Running command: {}", cmd_parts.join(" "));
     debug!("Time Elapsed in Setup: {:?}", start.elapsed());
     let mut p = Popen::create(
-        command.split_whitespace().collect::<Vec<&str>>().as_slice(),
+        &cmd_parts,
         PopenConfig::default(),
     )?;
     
@@ -108,6 +152,14 @@ pub fn run(
             Some(status) => status,
             None => {
                 debug!("Container execution timed out after {} seconds", timeout_secs);
+                // Kill the container using docker kill
+                if let Some(name) = container_name {
+                    debug!("Killing container: {}", name);
+                    let _kill_result = std::process::Command::new(&executor)
+                        .arg("kill")
+                        .arg(&name)
+                        .output();
+                }
                 p.terminate()?;
                 return Err(anyhow::anyhow!("Container execution timed out after {} seconds", timeout_secs));
             }
