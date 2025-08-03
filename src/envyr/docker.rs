@@ -284,6 +284,10 @@ pub fn generate_docker_ignore(pack: &Pack) -> Result<String> {
 
 #[cfg(test)]
 mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use std::fs;
+    use std::path::PathBuf;
 
     #[test]
     fn test_docker_volumes_map() {
@@ -292,5 +296,222 @@ mod tests {
 
         let input = vec!["/root:/root".to_string(), ".app:/app".to_string()];
         assert_eq!(super::get_fs_map_str(input), "-v /root:/root -v .app:/app");
+    }
+
+    #[test]
+    fn test_get_fs_map_str_empty() {
+        let input = vec![];
+        assert_eq!(get_fs_map_str(input), "");
+    }
+
+    #[test]
+    fn test_get_fs_map_str_single() {
+        let input = vec!["/host:/container".to_string()];
+        assert_eq!(get_fs_map_str(input), "-v /host:/container");
+    }
+
+    #[test]
+    fn test_get_port_map_str_empty() {
+        let input = vec![];
+        assert_eq!(get_port_map_str(input), "");
+    }
+
+    #[test]
+    fn test_get_port_map_str_single() {
+        let input = vec!["8080:80".to_string()];
+        assert_eq!(get_port_map_str(input), "-p 8080:80");
+    }
+
+    #[test]
+    fn test_get_port_map_str_multiple() {
+        let input = vec!["8080:80".to_string(), "3000:3000".to_string()];
+        assert_eq!(get_port_map_str(input), "-p 8080:80 -p 3000:3000");
+    }
+
+    #[test]
+    fn test_get_env_map_str_empty() {
+        let input = vec![];
+        assert_eq!(get_env_map_str(input), "");
+    }
+
+    #[test]
+    fn test_get_env_map_str_key_value() {
+        let input = vec!["KEY=value".to_string()];
+        assert_eq!(get_env_map_str(input), "-e KEY=value");
+    }
+
+    #[test]
+    fn test_get_env_map_str_multiple() {
+        let input = vec!["KEY1=value1".to_string(), "KEY2=value2".to_string()];
+        assert_eq!(get_env_map_str(input), "-e KEY1=value1 -e KEY2=value2");
+    }
+
+    #[test]
+    fn test_get_env_map_str_passthrough() {
+        // Set an environment variable for testing
+        std::env::set_var("TEST_VAR", "test_value");
+        
+        let input = vec!["TEST_VAR".to_string()];
+        assert_eq!(get_env_map_str(input), "-e TEST_VAR=test_value");
+        
+        // Clean up
+        std::env::remove_var("TEST_VAR");
+    }
+
+    #[test]
+    fn test_get_env_map_str_missing_var() {
+        // Ensure the variable doesn't exist
+        std::env::remove_var("NONEXISTENT_VAR");
+        
+        let input = vec!["NONEXISTENT_VAR".to_string()];
+        assert_eq!(get_env_map_str(input), "-e NONEXISTENT_VAR=");
+    }
+
+    #[test]
+    fn test_get_image_name() {
+        let path = std::path::Path::new("/tmp/test-project");
+        let tag = "latest".to_string();
+        
+        let result = get_image_name(path, tag).unwrap();
+        assert_eq!(result, "envyr-tmp-test-project:latest");
+    }
+
+    #[test]
+    fn test_get_image_name_with_special_chars() {
+        let path = std::path::Path::new("/home/user/my.project/with-dots.and.slashes");
+        let tag = "v1.0".to_string();
+        
+        let result = get_image_name(path, tag).unwrap();
+        assert_eq!(result, "envyr-home-user-my-project-with-dots-and-slashes:v1.0");
+    }
+
+    #[test]
+    fn test_get_image_name_case_handling() {
+        let path = std::path::Path::new("/tmp/TestProject");
+        let tag = "Latest".to_string();
+        
+        let result = get_image_name(path, tag).unwrap();
+        assert_eq!(result, "envyr-tmp-testproject:latest");
+    }
+
+    #[test]
+    fn test_generate_dockerfile_python() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        let pack = Pack {
+            name: "test-python".to_string(),
+            interpreter: "/usr/bin/env python".to_string(),
+            ptype: PType::Python,
+            deps: vec!["curl".to_string()],
+            entrypoint: PathBuf::from("main.py"),
+        };
+        
+        // Create requirements.txt to trigger type_reqs
+        fs::write(temp_dir.path().join("requirements.txt"), "requests==2.28.1").unwrap();
+        
+        let dockerfile = generate_dockerfile(&pack, temp_dir.path()).unwrap();
+        
+        assert!(dockerfile.contains("FROM python:3.11-alpine"));
+        assert!(dockerfile.contains("RUN apk add --no-cache  curl "));
+        assert!(dockerfile.contains("ADD ./requirements.txt"));
+        assert!(dockerfile.contains("RUN pip install"));
+        assert!(dockerfile.contains("ENTRYPOINT [\"python\", \"main.py\"]"));
+    }
+
+    #[test]
+    fn test_generate_dockerfile_node() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        let pack = Pack {
+            name: "test-node".to_string(),
+            interpreter: "/usr/bin/env node".to_string(),
+            ptype: PType::Node,
+            deps: vec!["git".to_string()],
+            entrypoint: PathBuf::from("index.js"),
+        };
+        
+        // Create package.json to trigger type_reqs
+        fs::write(temp_dir.path().join("package.json"), r#"{"name": "test"}"#).unwrap();
+        
+        let dockerfile = generate_dockerfile(&pack, temp_dir.path()).unwrap();
+        
+        assert!(dockerfile.contains("FROM node:alpine"));
+        assert!(dockerfile.contains("RUN apk add --no-cache  git "));
+        assert!(dockerfile.contains("ADD ./package.json"));
+        assert!(dockerfile.contains("RUN npm install"));
+        assert!(dockerfile.contains("ENTRYPOINT [\"node\", \"index.js\"]"));
+    }
+
+    #[test]
+    fn test_generate_dockerfile_shell() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        let pack = Pack {
+            name: "test-shell".to_string(),
+            interpreter: "/bin/bash".to_string(),
+            ptype: PType::Shell,
+            deps: vec!["wget".to_string()],
+            entrypoint: PathBuf::from("script.sh"),
+        };
+        
+        let dockerfile = generate_dockerfile(&pack, temp_dir.path()).unwrap();
+        
+        assert!(dockerfile.contains("FROM alpine"));
+        assert!(dockerfile.contains("RUN apk add --no-cache  wget "));
+        assert!(dockerfile.contains("ENTRYPOINT [\"/bin/bash\", \"script.sh\"]"));
+    }
+
+    #[test]
+    fn test_generate_dockerfile_other() {
+        let temp_dir = TempDir::new().unwrap();
+        
+        let pack = Pack {
+            name: "test-other".to_string(),
+            interpreter: "/usr/bin/custom".to_string(),
+            ptype: PType::Other,
+            deps: vec![],
+            entrypoint: PathBuf::from("app"),
+        };
+        
+        let dockerfile = generate_dockerfile(&pack, temp_dir.path()).unwrap();
+        
+        assert!(dockerfile.contains("FROM alpine"));
+        assert!(dockerfile.contains("ENTRYPOINT [\"/usr/bin/custom\", \"app\"]"));
+    }
+
+    #[test]
+    fn test_generate_docker_ignore_python() {
+        let pack = Pack {
+            name: "test".to_string(),
+            interpreter: "/usr/bin/env python".to_string(),
+            ptype: PType::Python,
+            deps: vec![],
+            entrypoint: PathBuf::from("main.py"),
+        };
+        
+        let dockerignore = generate_docker_ignore(&pack).unwrap();
+        
+        // The current template is generic, not language-specific
+        assert!(dockerignore.contains("**/.git"));
+        assert!(dockerignore.contains("*.pyc"));
+        assert!(dockerignore.contains("**/node_modules"));
+    }
+
+    #[test]
+    fn test_generate_docker_ignore_node() {
+        let pack = Pack {
+            name: "test".to_string(),
+            interpreter: "/usr/bin/env node".to_string(),
+            ptype: PType::Node,
+            deps: vec![],
+            entrypoint: PathBuf::from("index.js"),
+        };
+        
+        let dockerignore = generate_docker_ignore(&pack).unwrap();
+        
+        // The current template is generic, not language-specific
+        assert!(dockerignore.contains("**/node_modules"));
+        assert!(dockerignore.contains("**/.git"));
+        assert!(dockerignore.contains("*.pyc"));
     }
 }

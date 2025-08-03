@@ -134,3 +134,181 @@ pub fn create_requirements_txt(project_root: &Path) -> Result<()> {
     }
     Ok(())
 }
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use tempfile::TempDir;
+    use std::fs;
+
+    #[test]
+    fn test_check_python_main_double_quotes() {
+        let code = r#"
+def main():
+    print("Hello World")
+
+if __name__ == "__main__":
+    main()
+"#;
+        assert!(check_python_main(code).unwrap());
+    }
+
+    #[test]
+    fn test_check_python_main_single_quotes() {
+        let code = r#"
+def main():
+    print("Hello World")
+
+if __name__ == '__main__':
+    main()
+"#;
+        assert!(check_python_main(code).unwrap());
+    }
+
+    #[test]
+    fn test_check_python_main_false() {
+        let code = r#"
+def some_function():
+    print("Hello World")
+
+# No main block
+"#;
+        assert!(!check_python_main(code).unwrap());
+    }
+
+    #[test]
+    fn test_check_shebang_file_python() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.py");
+        fs::write(&file_path, "#!/usr/bin/env python3\nprint('Hello')").unwrap();
+        
+        let result = check_shebang_file(&file_path).unwrap();
+        assert_eq!(result, Some("/usr/bin/env python3".to_string()));
+    }
+
+    #[test]
+    fn test_check_shebang_file_bash() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.sh");
+        fs::write(&file_path, "#!/bin/bash\necho 'Hello'").unwrap();
+        
+        let result = check_shebang_file(&file_path).unwrap();
+        assert_eq!(result, Some("/bin/bash".to_string()));
+    }
+
+    #[test]
+    fn test_check_shebang_file_none() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.txt");
+        fs::write(&file_path, "This is just a text file").unwrap();
+        
+        let result = check_shebang_file(&file_path).unwrap();
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_map_extension_to_ptype() {
+        assert_eq!(map_extension_to_ptype("py"), Some(PType::Python));
+        assert_eq!(map_extension_to_ptype("sh"), Some(PType::Shell));
+        assert_eq!(map_extension_to_ptype("js"), Some(PType::Node));
+        assert_eq!(map_extension_to_ptype("ts"), Some(PType::Node));
+        assert_eq!(map_extension_to_ptype("txt"), None);
+        assert_eq!(map_extension_to_ptype("unknown"), None);
+    }
+
+    #[test]
+    fn test_check_package_json_exists() {
+        let temp_dir = TempDir::new().unwrap();
+        let package_json = temp_dir.path().join("package.json");
+        fs::write(&package_json, r#"{"name": "test"}"#).unwrap();
+        
+        assert!(check_package_json(temp_dir.path()));
+    }
+
+    #[test]
+    fn test_check_package_json_not_exists() {
+        let temp_dir = TempDir::new().unwrap();
+        assert!(!check_package_json(temp_dir.path()));
+    }
+
+    #[test]
+    fn test_check_requirements_txt_exists() {
+        let temp_dir = TempDir::new().unwrap();
+        let requirements = temp_dir.path().join("requirements.txt");
+        fs::write(&requirements, "requests==2.28.1").unwrap();
+        
+        assert!(check_requirements_txt(temp_dir.path()));
+    }
+
+    #[test]
+    fn test_check_requirements_txt_not_exists() {
+        let temp_dir = TempDir::new().unwrap();
+        assert!(!check_requirements_txt(temp_dir.path()));
+    }
+
+    #[test]
+    fn test_detect_main_node_with_valid_package_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let package_json = temp_dir.path().join("package.json");
+        fs::write(&package_json, r#"{"name": "test", "main": "index.js"}"#).unwrap();
+        
+        let result = detect_main_node(temp_dir.path());
+        assert_eq!(result, Some(PathBuf::from("index.js")));
+    }
+
+    #[test]
+    fn test_detect_main_node_with_no_main_field() {
+        let temp_dir = TempDir::new().unwrap();
+        let package_json = temp_dir.path().join("package.json");
+        fs::write(&package_json, r#"{"name": "test"}"#).unwrap();
+        
+        let result = detect_main_node(temp_dir.path());
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_detect_main_node_with_invalid_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let package_json = temp_dir.path().join("package.json");
+        fs::write(&package_json, "invalid json").unwrap();
+        
+        let result = detect_main_node(temp_dir.path());
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_detect_main_node_no_package_json() {
+        let temp_dir = TempDir::new().unwrap();
+        let result = detect_main_node(temp_dir.path());
+        assert_eq!(result, None);
+    }
+
+    #[test]
+    fn test_check_python_exec_priority_with_main() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.py");
+        fs::write(&file_path, r#"
+def main():
+    print("Hello")
+
+if __name__ == "__main__":
+    main()
+"#).unwrap();
+        
+        let priority = check_python_exec_priority(&file_path).unwrap();
+        assert_eq!(priority, PRIORITY_TOP);
+    }
+
+    #[test]
+    fn test_check_python_exec_priority_without_main() {
+        let temp_dir = TempDir::new().unwrap();
+        let file_path = temp_dir.path().join("test.py");
+        fs::write(&file_path, r#"
+def some_function():
+    print("Hello")
+"#).unwrap();
+        
+        let priority = check_python_exec_priority(&file_path).unwrap();
+        assert_eq!(priority, PRIORITY_UNLIKELY);
+    }
+}

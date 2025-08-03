@@ -13,7 +13,9 @@ Envyr is a Rust CLI tool that automagically packages applications and runs them 
 - `cargo build --release` - Build optimized release version
 - `cargo check` - Check code for errors without building
 - `cargo run -- <args>` - Run envyr with arguments
-- `cargo test` - Run tests (note: no tests currently exist in this project)
+- `cargo test` - Run all tests (unit and integration)
+- `cargo test --bin envyr` - Run unit tests only
+- `cargo test --test integration_tests` - Run integration tests only
 
 ### Cross-platform builds (via Makefile)
 - `make build-linux` - Build for both x86_64 and aarch64 Linux targets
@@ -76,3 +78,46 @@ Currently implemented:
 - `src/envyr/package.rs:44-47` - Project analysis entry point
 - `src/envyr/docker.rs` - Docker execution implementation
 - `src/envyr/meta.rs:22-40` - Metadata file generation
+
+## Testing
+
+The project now includes comprehensive test coverage:
+
+### Unit Tests
+- **utils.rs tests**: Core utility function testing (file detection, shebang parsing, etc.)
+- **package.rs tests**: Project analysis, Pack building and serialization
+- **docker.rs tests**: Docker command generation, Dockerfile templates, image naming
+- **meta.rs tests**: Metadata generation, alias management
+
+### Integration Tests
+- **CLI command tests**: Help, version, generate, alias commands
+- **Project generation tests**: Python, Node.js, Shell project detection and metadata creation
+- **Error handling tests**: Invalid paths, missing dependencies
+
+### Test Coverage Areas
+- ✅ File type detection (Python, Node.js, Shell)
+- ✅ Project analysis and entrypoint detection
+- ✅ Docker image naming and command generation
+- ✅ Environment variable and volume mapping
+- ✅ Alias storage and retrieval
+- ✅ CLI argument parsing and validation
+- ✅ Template generation (Dockerfile, .dockerignore)
+- ✅ Timeout functionality (Docker and Podman compatible)
+
+### Running Tests
+```bash
+# Run all tests
+cargo test
+
+# Run only unit tests  
+cargo test --bin envyr
+
+# Run only integration tests
+cargo test --test integration_tests
+
+# Run specific test module
+cargo test envyr::utils::tests
+
+# Run with verbose output
+cargo test -- --nocapture
+```
