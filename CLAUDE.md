@@ -28,6 +28,7 @@ Envyr is a Rust CLI tool that automagically packages applications and runs them 
 - `cargo run -- run --autogen <git-repo-url>` - Test running a repository with auto-detection
 - `cargo run -- generate <project-path>` - Generate metadata for a project
 - `cargo run -- alias list` - List stored aliases
+- `cargo run -- run --timeout <seconds> --autogen <project>` - Run with execution timeout
 
 ## Architecture Overview
 
@@ -103,6 +104,7 @@ The project now includes comprehensive test coverage:
 - ✅ CLI argument parsing and validation
 - ✅ Template generation (Dockerfile, .dockerignore)
 - ✅ Timeout functionality (Docker and Podman compatible)
+- ✅ Real-time output preservation during timeout operations
 
 ### Running Tests
 ```bash

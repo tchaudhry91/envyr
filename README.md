@@ -100,6 +100,7 @@ Options:
       --fs-map [<FS_MAP>...]       Mount the given directory as a volume. Format: host_dir:container_dir. Allows multiples. Only applicable on Docker Executor.
       --port-map [<PORT_MAP>...]   Map ports to host system, Format host_port:source_port. Allows multiples. Only applicable on Docker Executor.
       --env-map [<ENV_MAP>...]     Environment variables to pass through, leave value empty to pass through the value from the current environment. Format: 'key=value' or 'key' (passwthrough). Allows multiples.
+      --timeout <TIMEOUT>          Timeout for container execution in seconds. Container process will be terminated after this duration.
   -n, --name <NAME>                
   -i, --interpreter <INTERPRETER>  
   -x, --entrypoint <ENTRYPOINT>    
@@ -109,6 +110,18 @@ Options:
 
 Most cases should be covered by autodetection. Use the overrides if `--autogen` does not work.
 
+**Timeout Support**
+Envyr supports setting execution timeouts to automatically terminate long-running or infinite loop processes:
+
+```bash
+# Run with a 30-second timeout
+envyr run --timeout 30 --autogen /path/to/project
+
+# Run a potentially infinite script with timeout
+envyr run --timeout 10 --autogen git@github.com:user/infinite-script.git
+```
+
+When a timeout occurs, the container is properly killed and an error message is displayed. Real-time output is preserved during execution.
 
 **Generating Package Metadata in Advance**
 ```
