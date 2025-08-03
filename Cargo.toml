@@ -1,7 +1,7 @@
 [package]
 name = "envyr"
 description = "Envyr is a tool to automagically package an application and run it in a sandboxed environment."
-doucmentation = "https://github.com/tchaudhry91/envyr"
+documentation = "https://github.com/tchaudhry91/envyr"
 homepage = "https://github.com/tchaudhry91/envyr"
 license = "Apache-2.0"
 categories = ["command-line-utilities", "virtualization"]
