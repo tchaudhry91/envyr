@@ -66,7 +66,6 @@ impl Generator {
 pub enum Executors {
     #[default]
     Docker,
-    Nix,
     Native,
 }
 
@@ -207,7 +206,7 @@ mod tests {
         assert!(dockerignore_path.exists());
         
         let dockerfile_content = fs::read_to_string(dockerfile_path).unwrap();
-        assert!(dockerfile_content.contains("FROM python:3.11-alpine"));
+        assert!(dockerfile_content.contains("FROM python:3-alpine"));
         
         let dockerignore_content = fs::read_to_string(dockerignore_path).unwrap();
         assert!(dockerignore_content.contains("*.pyc"));

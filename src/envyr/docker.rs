@@ -50,49 +50,54 @@ pub fn get_docker_executor() -> Result<String> {
     Err(anyhow::anyhow!("Docker or Podman not found."))
 }
 
+pub struct DockerRunOpts {
+    pub force_rebuild: bool,
+    pub interactive: bool,
+    pub network: Option<String>,
+    pub tag: String,
+    pub fs_map: Vec<String>,
+    pub port_map: Vec<String>,
+    pub env_map: Vec<String>,
+    pub timeout: Option<u32>,
+    pub build_timeout: Option<u32>,
+    pub args: Vec<String>,
+}
+
+const DEFAULT_BUILD_TIMEOUT_SECS: u64 = 300;
+
 pub fn run(
     project_root: &Path,
-    force_rebuild: bool,
-    interactive: bool,
-    network: Option<String>,
-    tag: String,
-    fs_map: Vec<String>,
-    port_map: Vec<String>,
-    env_map: Vec<String>,
-    timeout: Option<u32>,
-    args: Vec<String>,
+    opts: DockerRunOpts,
     start: Instant,
 ) -> Result<()> {
     let executor = get_docker_executor()?;
 
     // Check if the image already exists
-    let mut image = get_image_name(project_root, tag.clone())?;
+    let mut image = get_image_name(project_root, opts.tag.clone())?;
 
-    if force_rebuild || !check_image_existence(&image)? {
+    if opts.force_rebuild || !check_image_existence(&executor, &image)? {
         // rebuild
         debug!("Building image: {}", image);
-        image = build_local(project_root, tag)?;
+        image = build_local(&executor, project_root, opts.tag, opts.build_timeout)?;
     }
 
     let mut interactive_mode = "";
-    if interactive {
+    if opts.interactive {
         interactive_mode = "-it";
     }
 
-    let network_name = match network {
+    let network_name = match opts.network {
         Some(n) => format!("--network={}", n),
         None => String::new(),
     };
 
     // Generate a unique container name for timeout handling
-    let container_name = if timeout.is_some() {
-        Some(format!("envyr-{}-{}", 
-            std::process::id(), 
-            std::time::SystemTime::now()
-                .duration_since(std::time::UNIX_EPOCH)
-                .expect("system clock is before UNIX epoch")
-                .as_secs()
-        ))
+    let container_name = if opts.timeout.is_some() {
+        let epoch_secs = std::time::SystemTime::now()
+            .duration_since(std::time::UNIX_EPOCH)
+            .map_err(|_| anyhow::anyhow!("System clock is set before UNIX epoch"))?
+            .as_secs();
+        Some(format!("envyr-{}-{}", std::process::id(), epoch_secs))
     } else {
         None
     };
@@ -117,26 +122,20 @@ pub fn run(
         cmd_parts.push(name);
     }
     
-    let port_map_str = get_port_map_str(port_map);
-    if !port_map_str.is_empty() {
-        cmd_parts.extend(port_map_str.split_whitespace());
-    }
-    
-    let fs_map_str = get_fs_map_str(fs_map);
-    if !fs_map_str.is_empty() {
-        cmd_parts.extend(fs_map_str.split_whitespace());
-    }
-    
-    let env_map_str = get_env_map_str(env_map);
-    if !env_map_str.is_empty() {
-        cmd_parts.extend(env_map_str.split_whitespace());
-    }
+    let port_args = get_port_map_args(opts.port_map);
+    cmd_parts.extend(port_args.iter().map(|s| s.as_str()));
+
+    let fs_args = get_fs_map_args(opts.fs_map);
+    cmd_parts.extend(fs_args.iter().map(|s| s.as_str()));
+
+    let env_args = get_env_map_args(opts.env_map);
+    cmd_parts.extend(env_args.iter().map(|s| s.as_str()));
     
     cmd_parts.push("--rm");
     cmd_parts.push(&image);
     
-    if !args.is_empty() {
-        cmd_parts.extend(args.iter().map(|s| s.as_str()));
+    if !opts.args.is_empty() {
+        cmd_parts.extend(opts.args.iter().map(|s| s.as_str()));
     }
 
     debug!("Running command: {}", cmd_parts.join(" "));
@@ -146,7 +145,7 @@ pub fn run(
         PopenConfig::default(),
     )?;
     
-    let status = if let Some(timeout_secs) = timeout {
+    let status = if let Some(timeout_secs) = opts.timeout {
         debug!("Running with timeout: {} seconds", timeout_secs);
         match p.wait_timeout(std::time::Duration::from_secs(timeout_secs as u64))? {
             Some(status) => status,
@@ -168,45 +167,38 @@ pub fn run(
         p.wait()?
     };
     if !status.success() {
-        return Err(anyhow::anyhow!("Non-zero exit code"));
+        return Err(anyhow::anyhow!("Container exited with non-zero status: {:?}", status));
     }
     Ok(())
 }
 
-fn get_env_map_str(env_map: Vec<String>) -> String {
-    if env_map.is_empty() {
-        return "".to_string();
-    }
-    let env_map = env_map
-        .iter()
-        .map(|x| {
-            if x.contains('=') {
-                x.to_string()
+fn get_env_map_args(env_map: Vec<String>) -> Vec<String> {
+    env_map
+        .into_iter()
+        .flat_map(|x| {
+            let val = if x.contains('=') {
+                x
             } else {
-                let val = env::var(x).unwrap_or("".to_string());
-                format!("{}={}", x, val)
-            }
+                let resolved = env::var(&x).unwrap_or_default();
+                format!("{}={}", x, resolved)
+            };
+            vec!["-e".to_string(), val]
         })
-        .collect::<Vec<String>>();
-
-    let env_map_string = String::from("-e");
-    format!("{} {}", env_map_string, env_map.join(" -e "))
+        .collect()
 }
 
-fn get_port_map_str(port_map: Vec<String>) -> String {
-    if port_map.is_empty() {
-        return "".to_string();
-    }
-    let port_map_string = String::from("-p");
-    format!("{} {}", port_map_string, port_map.join(" -p "))
+fn get_port_map_args(port_map: Vec<String>) -> Vec<String> {
+    port_map
+        .into_iter()
+        .flat_map(|x| vec!["-p".to_string(), x])
+        .collect()
 }
 
-fn get_fs_map_str(fs_map: Vec<String>) -> String {
-    if fs_map.is_empty() {
-        return "".to_string();
-    }
-    let fs_map_string = String::from("-v");
-    format!("{} {}", fs_map_string, fs_map.join(" -v "))
+fn get_fs_map_args(fs_map: Vec<String>) -> Vec<String> {
+    fs_map
+        .into_iter()
+        .flat_map(|x| vec!["-v".to_string(), x])
+        .collect()
 }
 
 fn get_image_name(project_root: &Path, tag: String) -> Result<String> {
@@ -223,8 +215,7 @@ fn get_image_name(project_root: &Path, tag: String) -> Result<String> {
     ))
 }
 
-fn check_image_existence(image: &str) -> Result<bool> {
-    let executor = get_docker_executor()?;
+fn check_image_existence(executor: &str, image: &str) -> Result<bool> {
     let cmd = std::process::Command::new(executor)
         .arg("images")
         .arg("-q")
@@ -240,25 +231,23 @@ fn check_image_existence(image: &str) -> Result<bool> {
     Ok(false)
 }
 
-fn build_local(project_root: &Path, tag: String) -> Result<String> {
-    let executor = get_docker_executor()?;
-
+fn build_local(executor: &str, project_root: &Path, tag: String, build_timeout: Option<u32>) -> Result<String> {
     let image = get_image_name(project_root, tag)?;
+    let timeout_secs = build_timeout.map(|t| t as u64).unwrap_or(DEFAULT_BUILD_TIMEOUT_SECS);
 
     let dockerfile_path = project_root.join(".envyr").join("Dockerfile");
-    debug!("Building local docker image: {}", image);
+    debug!("Building local docker image: {} (timeout: {}s)", image, timeout_secs);
     let mut popen_conf = PopenConfig {
         stdout: subprocess::Redirection::Pipe,
         stderr: subprocess::Redirection::Pipe,
         ..Default::default()
     };
     if log_enabled!(log::Level::Debug) {
-        // This prints all logs
         popen_conf = PopenConfig::default();
     }
     let mut p = Popen::create(
         &[
-            executor.as_str(),
+            executor,
             "build",
             "-t",
             image.as_str(),
@@ -272,17 +261,17 @@ fn build_local(project_root: &Path, tag: String) -> Result<String> {
         ],
         popen_conf,
     )?;
-    let status = p.wait_timeout(std::time::Duration::from_secs(300))?;
+    let status = p.wait_timeout(std::time::Duration::from_secs(timeout_secs))?;
 
     match status {
         Some(s) => {
             if s.success() {
                 Ok(image)
             } else {
-                Err(anyhow::anyhow!("Failed to build docker image."))
+                Err(anyhow::anyhow!("Failed to build docker image"))
             }
         }
-        None => Err(anyhow::anyhow!("Failed to build docker image.")),
+        None => Err(anyhow::anyhow!("Docker image build timed out after {}s", timeout_secs)),
     }
 }
 
@@ -354,81 +343,87 @@ mod tests {
     use std::path::PathBuf;
 
     #[test]
-    fn test_docker_volumes_map() {
+    fn test_get_fs_map_args_single() {
         let input = vec!["/root:/root".to_string()];
-        assert_eq!(super::get_fs_map_str(input), "-v /root:/root");
+        assert_eq!(get_fs_map_args(input), vec!["-v", "/root:/root"]);
+    }
 
+    #[test]
+    fn test_get_fs_map_args_multiple() {
         let input = vec!["/root:/root".to_string(), ".app:/app".to_string()];
-        assert_eq!(super::get_fs_map_str(input), "-v /root:/root -v .app:/app");
+        assert_eq!(get_fs_map_args(input), vec!["-v", "/root:/root", "-v", ".app:/app"]);
     }
 
     #[test]
-    fn test_get_fs_map_str_empty() {
-        let input = vec![];
-        assert_eq!(get_fs_map_str(input), "");
+    fn test_get_fs_map_args_empty() {
+        let input: Vec<String> = vec![];
+        let expected: Vec<String> = vec![];
+        assert_eq!(get_fs_map_args(input), expected);
     }
 
     #[test]
-    fn test_get_fs_map_str_single() {
-        let input = vec!["/host:/container".to_string()];
-        assert_eq!(get_fs_map_str(input), "-v /host:/container");
+    fn test_get_port_map_args_empty() {
+        let input: Vec<String> = vec![];
+        let expected: Vec<String> = vec![];
+        assert_eq!(get_port_map_args(input), expected);
     }
 
     #[test]
-    fn test_get_port_map_str_empty() {
-        let input = vec![];
-        assert_eq!(get_port_map_str(input), "");
-    }
-
-    #[test]
-    fn test_get_port_map_str_single() {
+    fn test_get_port_map_args_single() {
         let input = vec!["8080:80".to_string()];
-        assert_eq!(get_port_map_str(input), "-p 8080:80");
+        assert_eq!(get_port_map_args(input), vec!["-p", "8080:80"]);
     }
 
     #[test]
-    fn test_get_port_map_str_multiple() {
+    fn test_get_port_map_args_multiple() {
         let input = vec!["8080:80".to_string(), "3000:3000".to_string()];
-        assert_eq!(get_port_map_str(input), "-p 8080:80 -p 3000:3000");
+        assert_eq!(get_port_map_args(input), vec!["-p", "8080:80", "-p", "3000:3000"]);
     }
 
     #[test]
-    fn test_get_env_map_str_empty() {
-        let input = vec![];
-        assert_eq!(get_env_map_str(input), "");
+    fn test_get_env_map_args_empty() {
+        let input: Vec<String> = vec![];
+        let expected: Vec<String> = vec![];
+        assert_eq!(get_env_map_args(input), expected);
     }
 
     #[test]
-    fn test_get_env_map_str_key_value() {
+    fn test_get_env_map_args_key_value() {
         let input = vec!["KEY=value".to_string()];
-        assert_eq!(get_env_map_str(input), "-e KEY=value");
+        assert_eq!(get_env_map_args(input), vec!["-e", "KEY=value"]);
     }
 
     #[test]
-    fn test_get_env_map_str_multiple() {
+    fn test_get_env_map_args_multiple() {
         let input = vec!["KEY1=value1".to_string(), "KEY2=value2".to_string()];
-        assert_eq!(get_env_map_str(input), "-e KEY1=value1 -e KEY2=value2");
+        assert_eq!(get_env_map_args(input), vec!["-e", "KEY1=value1", "-e", "KEY2=value2"]);
     }
 
     #[test]
-    fn test_get_env_map_str_passthrough() {
+    fn test_get_env_map_args_passthrough() {
         // Set an environment variable for testing
         std::env::set_var("TEST_VAR", "test_value");
-        
+
         let input = vec!["TEST_VAR".to_string()];
-        assert_eq!(get_env_map_str(input), "-e TEST_VAR=test_value");
-        
+        assert_eq!(get_env_map_args(input), vec!["-e", "TEST_VAR=test_value"]);
+
         // Clean up
         std::env::remove_var("TEST_VAR");
     }
 
     #[test]
-    fn test_get_env_map_str_missing_var() {
+    fn test_get_env_map_args_missing_var() {
         // Ensure the variable doesn't exist
         std::env::remove_var("NONEXISTENT_VAR");
-        
+
         let input = vec!["NONEXISTENT_VAR".to_string()];
-        assert_eq!(get_env_map_str(input), "-e NONEXISTENT_VAR=");
+        assert_eq!(get_env_map_args(input), vec!["-e", "NONEXISTENT_VAR="]);
+    }
+
+    #[test]
+    fn test_get_env_map_args_value_with_spaces() {
+        let input = vec!["KEY=value with spaces".to_string()];
+        assert_eq!(get_env_map_args(input), vec!["-e", "KEY=value with spaces"]);
     }
 
     #[test]
@@ -475,7 +470,7 @@ mod tests {
         
         let dockerfile = generate_dockerfile(&pack, temp_dir.path()).unwrap();
         
-        assert!(dockerfile.contains("FROM python:3.11-alpine"));
+        assert!(dockerfile.contains("FROM python:3-alpine"));
         assert!(dockerfile.contains("RUN apk add --no-cache  curl "));
         assert!(dockerfile.contains("ADD ./requirements.txt"));
         assert!(dockerfile.contains("RUN pip install"));
@@ -499,7 +494,7 @@ mod tests {
         
         let dockerfile = generate_dockerfile(&pack, temp_dir.path()).unwrap();
         
-        assert!(dockerfile.contains("FROM node:alpine"));
+        assert!(dockerfile.contains("FROM node:lts-alpine"));
         assert!(dockerfile.contains("RUN apk add --no-cache  git "));
         assert!(dockerfile.contains("ADD ./package.json"));
         assert!(dockerfile.contains("RUN npm install"));

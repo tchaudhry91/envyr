@@ -74,9 +74,10 @@ Commands:
   help      Print this message or the help of the given subcommand(s)
 
 Options:
-  -v, --verbose  Emit Envyr logs to stdout. Useful for debugging. But may spoil pipes.
-  -h, --help     Print help
-  -V, --version  Print version
+  -v, --verbose      Emit Envyr logs to stdout. Useful for debugging. But may spoil pipes.
+      --root <PATH>  Override the default envyr root directory (~/.envyr)
+  -h, --help         Print help
+  -V, --version      Print version
 ```
 
 **Running a Package**
@@ -122,6 +123,18 @@ envyr run --timeout 10 --autogen git@github.com:user/infinite-script.git
 ```
 
 When a timeout occurs, the container is properly killed and an error message is displayed. Real-time output is preserved during execution.
+
+**Custom Root Directory**
+
+By default, envyr stores its data (cached repos, aliases, etc.) in `~/.envyr`. You can override this with the `--root` flag:
+
+```bash
+# Use a custom root directory
+envyr --root /tmp/my-envyr run --autogen /path/to/project
+
+# Useful for CI/CD or isolated environments
+envyr --root "$CI_PROJECT_DIR/.envyr" run --autogen git@github.com:user/repo.git
+```
 
 **Generating Package Metadata in Advance**
 ```

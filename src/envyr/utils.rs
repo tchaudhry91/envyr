@@ -24,7 +24,7 @@ pub fn check_python_main(code: &str) -> Result<bool> {
     Ok(false)
 }
 
-pub fn check_python_exec_priority(f: &PathBuf) -> Result<u8> {
+pub fn check_python_exec_priority(f: &Path) -> Result<u8> {
     let code = std::fs::read_to_string(f)?;
     let main_defined = check_python_main(&code)?;
     if main_defined {
@@ -34,7 +34,7 @@ pub fn check_python_exec_priority(f: &PathBuf) -> Result<u8> {
 }
 
 // Returns the interpretter of the file if a shebang is found on top.
-pub fn check_shebang_file(file: &PathBuf) -> Result<Option<String>> {
+pub fn check_shebang_file(file: &Path) -> Result<Option<String>> {
     let file = File::open(file)?;
     let mut reader = io::BufReader::new(file);
     let mut line = vec![];
@@ -94,6 +94,9 @@ struct PackDeps {
     deps: Vec<String>,
 }
 
+// WARNING: This function recursively invokes `envyr run` as a subprocess.
+// It depends on an external GitHub repo and could cause infinite recursion
+// if the target repo itself triggers bash dependency detection.
 pub fn check_bash_dependencies(script_file: &Path) -> Result<Vec<String>> {
     let output = std::process::Command::new("envyr")
         .arg("run")
@@ -107,8 +110,9 @@ pub fn check_bash_dependencies(script_file: &Path) -> Result<Vec<String>> {
     Ok(deps.deps)
 }
 
+// WARNING: This function recursively invokes `envyr run` as a subprocess.
+// It depends on an external GitHub repo for pipreqs wrapping.
 pub fn create_requirements_txt(project_root: &Path) -> Result<()> {
-    // Assume pipreqs exists
     let output = std::process::Command::new("envyr")
         .arg("run")
         .arg(format!("--fs-map={}:/envyr/target", project_root.display()))

@@ -41,7 +41,7 @@ impl Pack {
         Ok(())
     }
 
-    pub fn builder(project_root: &PathBuf) -> Result<PackBuilder> {
+    pub fn builder(project_root: &Path) -> Result<PackBuilder> {
         let builder = analyse_project(project_root)?;
         Ok(builder)
     }
@@ -137,14 +137,12 @@ impl PackBuilder {
 
         let mut deps = vec![];
 
-        if let Some(interp) = self.interpreter.clone() {
-            if let Some(entryp) = self.entrypoint.clone() {
-                debug!("Checking for available os-level dependencies");
-                if interp.contains("bash") {
-                    deps = utils::check_bash_dependencies(&self.project_root.clone().join(entryp))
-                        .unwrap_or_default();
-                    debug!("Found deps after analysis: {:?}", deps);
-                }
+        if let (Some(interp), Some(entryp)) = (&self.interpreter, &self.entrypoint) {
+            debug!("Checking for available os-level dependencies");
+            if interp.contains("bash") {
+                deps = utils::check_bash_dependencies(&self.project_root.join(entryp))
+                    .unwrap_or_default();
+                debug!("Found deps after analysis: {:?}", deps);
             }
         }
 
@@ -207,10 +205,10 @@ fn detect_ptype(project_root: &Path) -> Option<PType> {
     None
 }
 
-fn analyse_project(project_root: &PathBuf) -> Result<PackBuilder> {
+fn analyse_project(project_root: &Path) -> Result<PackBuilder> {
     let mut builder = PackBuilder {
         name: detect_name(project_root),
-        project_root: project_root.clone(),
+        project_root: project_root.to_path_buf(),
         ..Default::default()
     };
 
@@ -220,9 +218,10 @@ fn analyse_project(project_root: &PathBuf) -> Result<PackBuilder> {
     }
 
     // Walk the project directory
+    // depth == 0 is the root entry itself; only filter children
     for entry in WalkDir::new(project_root)
         .into_iter()
-        .filter_entry(|e| !(is_hidden(e) || ignore_dir(e)))
+        .filter_entry(|e| e.depth() == 0 || !(is_hidden(e) || ignore_dir(e)))
     {
         match entry {
             Ok(entry) => {
@@ -230,9 +229,9 @@ fn analyse_project(project_root: &PathBuf) -> Result<PackBuilder> {
                     // Do a series of checks
                     // 1. Check a possible entrypoint
                     if let Some((f, interpreter, priority)) = detect_possible_entrypoint(&entry) {
-                        let relative_path = diff_paths(&f, project_root).expect(
-                            "Path Diff Error, this should not happen while walking the dir.",
-                        );
+                        let relative_path = diff_paths(&f, project_root).ok_or_else(|| {
+                            anyhow::anyhow!("Failed to compute relative path for {:?}", f)
+                        })?;
                         builder
                             .executables
                             .push((relative_path, interpreter, priority));
@@ -273,7 +272,7 @@ fn detect_possible_entrypoint(entry: &DirEntry) -> Option<(PathBuf, String, u8)>
     match extension {
         // A python file is a possible entrypoint. One with __main__ gets highest priority.
         "py" => {
-            let priority = utils::check_python_exec_priority(&entry.path().to_path_buf())
+            let priority = utils::check_python_exec_priority(entry.path())
                 .unwrap_or(PRIORITY_LAST);
             return Some((
                 entry.path().to_path_buf(),
@@ -281,14 +280,17 @@ fn detect_possible_entrypoint(entry: &DirEntry) -> Option<(PathBuf, String, u8)>
                 priority,
             ));
         }
-        // To-Do
-        "js" => {}
+        "js" => {
+            return Some((
+                entry.path().to_path_buf(),
+                "/usr/bin/env node".to_string(),
+                utils::PRIORITY_LIKELY,
+            ));
+        }
         _ => {}
     };
 
-    if let Some(interpreter) =
-        utils::check_shebang_file(&entry.path().to_path_buf()).unwrap_or(None)
-    {
+    if let Some(interpreter) = utils::check_shebang_file(entry.path()).unwrap_or(None) {
         let interp_trimmed = interpreter.trim();
         return Some((
             entry.path().to_path_buf(),
@@ -476,94 +478,83 @@ echo "Hello World"
         assert!(result.unwrap_err().to_string().contains("entrypoint"));
     }
 
-    // TODO: Re-enable when analyse_project function is fixed
-    // #[test]
-    // fn test_analyse_project_python() {
-    //     let temp_dir = TempDir::new().unwrap();
-    //     
-    //     // Create a Python project with main
-    //     fs::write(temp_dir.path().join("main.py"), r#"
-    // def main():
-    //     print("Hello World")
-    //
-    // if __name__ == "__main__":
-    //     main()
-    // "#).unwrap();
-    //     
-    //     let builder = analyse_project(&temp_dir.path().to_path_buf()).unwrap();
-    //     
-    //     assert!(builder.name.is_some());
-    //     assert!(matches!(builder.ptype, PType::Python));
-    //     assert!(!builder.executables.is_empty());
-    //     
-    //     // Should find main.py as an executable
-    //     let main_exe = builder.executables.iter().find(|(name, _, _)| {
-    //         name.file_name().map(|n| n.to_str()) == Some(Some("main.py"))
-    //     });
-    //     assert!(main_exe.is_some());
-    // }
+    #[test]
+    fn test_analyse_project_python() {
+        let temp_dir = TempDir::new().unwrap();
 
-    // TODO: Re-enable when analyse_project function is fixed
-    // #[test]
-    // fn test_analyse_project_node() {
-    //     let temp_dir = TempDir::new().unwrap();
-    //     
-    //     // Create a Node.js project
-    //     fs::write(temp_dir.path().join("package.json"), r#"
-    // {
-    //     "name": "test-node",
-    //     "main": "index.js"
-    // }
-    // "#).unwrap();
-    //     fs::write(temp_dir.path().join("index.js"), "console.log('Hello World');").unwrap();
-    //     
-    //     let builder = analyse_project(&temp_dir.path().to_path_buf()).unwrap();
-    //     
-    //     assert!(builder.name.is_some());
-    //     assert!(matches!(builder.ptype, PType::Node));
-    //     assert!(!builder.executables.is_empty());
-    //     
-    //     // Should find index.js as an executable
-    //     let index_exe = builder.executables.iter().find(|(name, _, _)| {
-    //         name.file_name().map(|n| n.to_str()) == Some(Some("index.js"))
-    //     });
-    //     assert!(index_exe.is_some());
-    // }
+        fs::write(temp_dir.path().join("main.py"), r#"
+def main():
+    print("Hello World")
 
-    // TODO: Re-enable when analyse_project function is fixed
-    // #[test]
-    // fn test_analyse_project_shell() {
-    //     let temp_dir = TempDir::new().unwrap();
-    //     
-    //     // Create a shell script with shebang
-    //     fs::write(temp_dir.path().join("script.sh"), r#"#!/bin/bash
-    // echo "Hello World"
-    // "#).unwrap();
-    //     
-    //     let builder = analyse_project(&temp_dir.path().to_path_buf()).unwrap();
-    //     
-    //     assert!(builder.name.is_some());
-    //     assert!(!builder.executables.is_empty());
-    //     
-    //     // Should find script.sh as an executable
-    //     let script_exe = builder.executables.iter().find(|(name, _, _)| {
-    //         name.file_name().map(|n| n.to_str()) == Some(Some("script.sh"))
-    //     });
-    //     assert!(script_exe.is_some());
-    //     
-    //     if let Some((_, interpreter, _)) = script_exe {
-    //         assert_eq!(interpreter, "/bin/bash");
-    //     }
-    // }
+if __name__ == "__main__":
+    main()
+"#).unwrap();
+
+        let builder = analyse_project(temp_dir.path()).unwrap();
+
+        assert!(builder.name.is_some());
+        assert!(matches!(builder.ptype, PType::Python));
+        assert!(!builder.executables.is_empty());
+
+        let main_exe = builder.executables.iter().find(|(name, _, _)| {
+            name.file_name().map(|n| n.to_str()) == Some(Some("main.py"))
+        });
+        assert!(main_exe.is_some());
+    }
+
+    #[test]
+    fn test_analyse_project_node() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs::write(temp_dir.path().join("package.json"), r#"
+{
+    "name": "test-node",
+    "main": "index.js"
+}
+"#).unwrap();
+        fs::write(temp_dir.path().join("index.js"), "console.log('Hello World');").unwrap();
+
+        let builder = analyse_project(temp_dir.path()).unwrap();
+
+        assert!(builder.name.is_some());
+        assert!(matches!(builder.ptype, PType::Node));
+        assert!(!builder.executables.is_empty());
+
+        let index_exe = builder.executables.iter().find(|(name, _, _)| {
+            name.file_name().map(|n| n.to_str()) == Some(Some("index.js"))
+        });
+        assert!(index_exe.is_some());
+    }
+
+    #[test]
+    fn test_analyse_project_shell() {
+        let temp_dir = TempDir::new().unwrap();
+
+        fs::write(temp_dir.path().join("script.sh"), "#!/bin/bash\necho \"Hello World\"\n").unwrap();
+
+        let builder = analyse_project(temp_dir.path()).unwrap();
+
+        assert!(builder.name.is_some());
+        assert!(!builder.executables.is_empty());
+
+        let script_exe = builder.executables.iter().find(|(name, _, _)| {
+            name.file_name().map(|n| n.to_str()) == Some(Some("script.sh"))
+        });
+        assert!(script_exe.is_some());
+
+        if let Some((_, interpreter, _)) = script_exe {
+            assert_eq!(interpreter, "/bin/bash");
+        }
+    }
 
     #[test]
     fn test_analyse_project_empty_directory() {
         let temp_dir = TempDir::new().unwrap();
-        
-        let builder = analyse_project(&temp_dir.path().to_path_buf()).unwrap();
-        
-        assert!(builder.name.is_some()); // Should still have a name (directory name)
-        assert!(matches!(builder.ptype, PType::Other)); // Should default to Other
-        assert!(builder.executables.is_empty()); // No executables found
+
+        let builder = analyse_project(temp_dir.path()).unwrap();
+
+        assert!(builder.name.is_some());
+        assert!(matches!(builder.ptype, PType::Other));
+        assert!(builder.executables.is_empty());
     }
 }
