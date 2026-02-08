@@ -141,7 +141,7 @@ enum Command {
 
 #[derive(Parser)]
 #[command(name = "envyr")]
-#[command(author = "Tanmay Chaudhry <tanmay.chaudhry@gmail.com")]
+#[command(author = "Tanmay Chaudhry <tanmay.chaudhry@gmail.com>")]
 #[command(about="A tool to automagically create 'executable' packages for your scripts.", long_about=None)]
 #[command(version = "0.2.1")]
 pub struct App {
@@ -155,6 +155,9 @@ pub struct App {
         default_value_t = false
     )]
     verbose: bool,
+
+    #[arg(long, help = "Override the default envyr root directory (~/.envyr)")]
+    root: Option<PathBuf>,
 }
 
 fn setup_logging(verbose: bool) -> Result<()> {
@@ -173,12 +176,13 @@ fn setup_logging(verbose: bool) -> Result<()> {
 }
 
 fn get_alias_config(envyr_root: PathBuf, alias: String) -> Option<RunConfig> {
-    let aliases = meta::load_aliases(&envyr_root);
-    if aliases.is_err() {
-        debug!("No aliases found.");
-        return None;
-    }
-    let aliases = aliases.unwrap();
+    let aliases = match meta::load_aliases(&envyr_root) {
+        Ok(a) => a,
+        Err(_) => {
+            debug!("No aliases found.");
+            return None;
+        }
+    };
     aliases.get(&alias).cloned()
 }
 
@@ -202,9 +206,14 @@ fn main() -> Result<()> {
     let start = Instant::now();
     let app = App::parse();
 
-    // TODO: Make this configurable later
-    let homedir = home::home_dir().unwrap();
-    let envyr_root = homedir.join(".envyr");
+    let envyr_root = match app.root {
+        Some(r) => r,
+        None => {
+            let homedir = home::home_dir()
+                .ok_or_else(|| anyhow::anyhow!("Could not determine home directory. Is $HOME set?"))?;
+            homedir.join(".envyr")
+        }
+    };
 
     setup_logging(app.verbose)?;
 
@@ -329,22 +338,21 @@ fn run(envyr_root: &Path, config: RunConfig, start: Instant) -> Result<()> {
     }
     match config.executor {
         envyr::meta::Executors::Docker => {
-            envyr::docker::run(
-                &canon_path,
-                config.refresh,
-                config.interactive,
-                config.network,
-                config.tag,
-                config.fs_map,
-                config.port_map,
-                config.env_map,
-                config.timeout,
-                config.args,
-                start,
-            )?;
+            let opts = envyr::docker::DockerRunOpts {
+                force_rebuild: config.refresh,
+                interactive: config.interactive,
+                network: config.network,
+                tag: config.tag,
+                fs_map: config.fs_map,
+                port_map: config.port_map,
+                env_map: config.env_map,
+                timeout: config.timeout,
+                build_timeout: None,
+                args: config.args,
+            };
+            envyr::docker::run(&canon_path, opts, start)?;
         }
-        envyr::meta::Executors::Nix => todo!(),
-        envyr::meta::Executors::Native => todo!(),
+        envyr::meta::Executors::Native => todo!("Native executor not yet implemented"),
     }
     Ok(())
 }

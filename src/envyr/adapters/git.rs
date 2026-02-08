@@ -40,14 +40,14 @@ impl Fetcher for GitFetcher {
 }
 
 fn pull_repo(path: &Path) -> Result<()> {
-    let status = std::process::Command::new("git")
+    let output = std::process::Command::new("git")
         .arg("pull")
         .current_dir(path)
         .output()?;
-    if !status.status.success() {
+    if !output.status.success() {
         return Err(anyhow!(
-            "Failed to pull git repository: {:?}",
-            String::from_utf8(status.stderr),
+            "Failed to pull git repository: {}",
+            String::from_utf8_lossy(&output.stderr),
         ));
     };
     Ok(())
@@ -55,15 +55,15 @@ fn pull_repo(path: &Path) -> Result<()> {
 
 fn fetch_tags(path: &Path) -> Result<()> {
     debug!("Fetching tags for: {:?}", path);
-    let status = std::process::Command::new("git")
+    let output = std::process::Command::new("git")
         .arg("fetch")
         .arg("--tags")
         .current_dir(path)
         .output()?;
-    if !status.status.success() {
+    if !output.status.success() {
         return Err(anyhow!(
-            "Failed to fetch tags: {:?}",
-            String::from_utf8(status.stderr),
+            "Failed to fetch tags: {}",
+            String::from_utf8_lossy(&output.stderr),
         ));
     };
     Ok(())
@@ -72,15 +72,16 @@ fn fetch_tags(path: &Path) -> Result<()> {
 fn checkout_version(path: &Path, version: &str) -> Result<()> {
     if version != "latest" {
         debug!("Checking out version: {}", version);
-        let status = std::process::Command::new("git")
+        let output = std::process::Command::new("git")
             .arg("checkout")
             .arg(version)
             .current_dir(path)
             .output()?;
-        if !status.status.success() {
+        if !output.status.success() {
             return Err(anyhow!(
-                "Failed to checkout version: {:?}",
-                String::from_utf8(status.stderr),
+                "Failed to checkout version '{}': {}",
+                version,
+                String::from_utf8_lossy(&output.stderr),
             ));
         };
     }
@@ -103,15 +104,15 @@ fn clone_repo(url: &str, path: &Path) -> Result<()> {
         }
     }
 
-    let status = std::process::Command::new("git")
+    let output = std::process::Command::new("git")
         .arg("clone")
         .arg(url)
         .arg(path)
         .output()?;
-    if !status.status.success() {
+    if !output.status.success() {
         return Err(anyhow!(
-            "Failed to clone git repository: {:?}",
-            String::from_utf8(status.stderr),
+            "Failed to clone git repository: {}",
+            String::from_utf8_lossy(&output.stderr),
         ));
     };
 
@@ -119,27 +120,48 @@ fn clone_repo(url: &str, path: &Path) -> Result<()> {
 }
 
 fn swap_back_to_latest(path: &Path) -> Result<()> {
-    debug!("Swapping back to main/master branch");
-    let out = std::process::Command::new("git")
-        .arg("checkout")
-        .arg("main")
+    debug!("Swapping back to default branch");
+
+    // Try to detect the default branch from remote HEAD
+    if let Ok(output) = std::process::Command::new("git")
+        .args(["symbolic-ref", "refs/remotes/origin/HEAD", "--short"])
         .current_dir(path)
-        .output()?;
-    if !out.status.success() {
-        // Try master
-        let out = std::process::Command::new("git")
-            .arg("checkout")
-            .arg("master")
-            .current_dir(path)
-            .output()?;
-        if !out.status.success() {
-            return Err(anyhow!(
-                "Failed to swap back to main/master branch: {:?}",
-                String::from_utf8(out.stderr),
-            ));
+        .output()
+    {
+        if output.status.success() {
+            let branch = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            let branch = branch.strip_prefix("origin/").unwrap_or(&branch);
+            let checkout = std::process::Command::new("git")
+                .args(["checkout", branch])
+                .current_dir(path)
+                .output()?;
+            if checkout.status.success() {
+                return Ok(());
+            }
         }
     }
-    Ok(())
+
+    // Fallback: try main, then master
+    let out = std::process::Command::new("git")
+        .args(["checkout", "main"])
+        .current_dir(path)
+        .output()?;
+    if out.status.success() {
+        return Ok(());
+    }
+
+    let out = std::process::Command::new("git")
+        .args(["checkout", "master"])
+        .current_dir(path)
+        .output()?;
+    if out.status.success() {
+        return Ok(());
+    }
+
+    Err(anyhow!(
+        "Failed to checkout default branch: {}",
+        String::from_utf8_lossy(&out.stderr),
+    ))
 }
 
 fn get_storage_path(url: &str) -> Result<PathBuf> {
@@ -153,22 +175,46 @@ fn get_storage_path(url: &str) -> Result<PathBuf> {
 
 fn get_git_provider(url: &str) -> Result<String> {
     let url = url.strip_suffix(".git").unwrap_or(url);
-    let provider = url.split(':').next().unwrap().to_string();
-    let provider = provider.split('@').last().unwrap_or(&provider).to_string();
-    Ok(provider)
+    // Handle HTTPS/HTTP URLs: https://github.com/org/repo
+    if let Some(rest) = url.strip_prefix("https://").or_else(|| url.strip_prefix("http://")) {
+        let hostname = rest
+            .split('/')
+            .next()
+            .ok_or_else(|| anyhow!("Failed to parse hostname from URL: {}", url))?;
+        return Ok(hostname.to_string());
+    }
+    // Handle SSH-style URLs: git@github.com:org/repo
+    let provider = url
+        .split(':')
+        .next()
+        .ok_or_else(|| anyhow!("Failed to parse git provider from URL: {}", url))?;
+    let provider = provider.split('@').last().unwrap_or(provider);
+    Ok(provider.to_string())
 }
 
 fn get_org_name(url: &str) -> Result<String> {
     let url = url.strip_suffix(".git").unwrap_or(url);
-    let name = url.split('/').nth_back(1).unwrap().to_string();
-    let name = name.split(':').last().unwrap().to_string();
+    let name = url
+        .split('/')
+        .nth_back(1)
+        .ok_or_else(|| anyhow!("Failed to parse org name from URL: {}", url))?
+        .to_string();
+    let name = name
+        .split(':')
+        .last()
+        .ok_or_else(|| anyhow!("Failed to parse org name from URL: {}", url))?
+        .to_string();
     Ok(name)
 }
 
 // Get project name for git repository
 fn get_project_name(url: &str) -> Result<String> {
     let url = url.strip_suffix(".git").unwrap_or(url);
-    let name = url.split('/').last().unwrap().to_string();
+    let name = url
+        .split('/')
+        .last()
+        .ok_or_else(|| anyhow!("Failed to parse project name from URL: {}", url))?
+        .to_string();
     Ok(name)
 }
 
@@ -187,6 +233,33 @@ mod tests {
         let provider = get_git_provider(url).unwrap();
         assert_eq!(provider, "github.com");
 
+        let full_path = get_storage_path(url).unwrap();
+        assert_eq!(full_path, PathBuf::from("github.com/envyr-lang/envyr"));
+    }
+
+    #[test]
+    fn test_get_org_name_no_slash() {
+        let result = get_org_name("no-slash-here");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_project_name_without_git_suffix() {
+        let url = "git@github.com:org/my-project";
+        let name = get_project_name(url).unwrap();
+        assert_eq!(name, "my-project");
+    }
+
+    #[test]
+    fn test_get_git_provider_https_style() {
+        let url = "https://github.com/org/repo.git";
+        let provider = get_git_provider(url).unwrap();
+        assert_eq!(provider, "github.com");
+    }
+
+    #[test]
+    fn test_get_storage_path_https() {
+        let url = "https://github.com/envyr-lang/envyr.git";
         let full_path = get_storage_path(url).unwrap();
         assert_eq!(full_path, PathBuf::from("github.com/envyr-lang/envyr"));
     }

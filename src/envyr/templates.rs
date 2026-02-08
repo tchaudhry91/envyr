@@ -1,12 +1,12 @@
 pub static TEMPLATE_DOCKERFILE: &str = r#"
 # Envyr Base
 {{#if (eq ptype "Python")}}
-FROM python:3.11-alpine
+FROM python:3-alpine
 {{else}}
 {{#if (eq ptype "Node")}}
-FROM node:alpine
+FROM node:lts-alpine
 {{else}}
-FROM alpine
+FROM alpine:3
 {{/if}}
 {{/if}}
 
