@@ -26,6 +26,8 @@ jobs:
     if: startsWith(github.ref, 'refs/tags/v')
     steps:
     - uses: actions/checkout@v4
+    - name: Regenerate lockfile
+      run: cargo generate-lockfile
     - name: Publish to crates.io
       run: cargo publish
       env:
