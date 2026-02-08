@@ -46,7 +46,7 @@ impl Generator {
         Ok(())
     }
 
-    pub fn generate(&self, project_root: &Path) -> Result<()> {
+    pub fn generate(&self, project_root: &Path, executor: &Executors) -> Result<()> {
         self.generate_meta_dir(project_root)?;
         // Write the json file to the meta dir
         self.pack.save(project_root)?;
@@ -56,8 +56,10 @@ impl Generator {
             self.generate_python(project_root)?;
         }
 
-        // Generate the dockerfile
-        self.generate_docker(project_root)?;
+        // Only generate Docker artifacts for Docker executor
+        if matches!(executor, Executors::Docker) {
+            self.generate_docker(project_root)?;
+        }
         Ok(())
     }
 }
@@ -218,26 +220,49 @@ mod tests {
         let pack = create_test_pack();
         let generator = Generator::new(pack.clone());
         
-        generator.generate(temp_dir.path()).unwrap();
-        
+        generator.generate(temp_dir.path(), &Executors::Docker).unwrap();
+
         // Check that meta directory was created
         let meta_dir = temp_dir.path().join(".envyr");
         assert!(meta_dir.exists());
-        
+
         // Check that meta.json was created
         let meta_file = meta_dir.join("meta.json");
         assert!(meta_file.exists());
-        
+
         // Check that docker files were created
         let dockerfile = meta_dir.join("Dockerfile");
         let dockerignore = temp_dir.path().join(".dockerignore");
         assert!(dockerfile.exists());
         assert!(dockerignore.exists());
-        
+
         // Verify meta.json content
         let loaded_pack = Pack::load(temp_dir.path()).unwrap();
         assert_eq!(loaded_pack.name, pack.name);
         assert_eq!(loaded_pack.interpreter, pack.interpreter);
+    }
+
+    #[test]
+    fn test_generator_generate_native_skips_docker() {
+        let temp_dir = TempDir::new().unwrap();
+        let pack = create_test_pack();
+        let generator = Generator::new(pack.clone());
+
+        generator.generate(temp_dir.path(), &Executors::Native).unwrap();
+
+        // Check that meta directory was created
+        let meta_dir = temp_dir.path().join(".envyr");
+        assert!(meta_dir.exists());
+
+        // Check that meta.json was created
+        let meta_file = meta_dir.join("meta.json");
+        assert!(meta_file.exists());
+
+        // Check that docker files were NOT created
+        let dockerfile = meta_dir.join("Dockerfile");
+        let dockerignore = temp_dir.path().join(".dockerignore");
+        assert!(!dockerfile.exists());
+        assert!(!dockerignore.exists());
     }
 
     #[test]
