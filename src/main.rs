@@ -329,13 +329,16 @@ fn run(envyr_root: &Path, config: RunConfig, start: Instant) -> Result<()> {
         config.refresh,
         config.sub_dir,
     )?;
-    if config.autogen {
+    let pack = if config.autogen {
         let pack_builder = envyr::package::Pack::builder(&canon_path)?;
         let pack_builder = override_builder_opts(config.overrides, pack_builder);
         let pack = pack_builder.build()?;
-        let generator = envyr::meta::Generator::new(pack);
-        generator.generate(&canon_path)?;
-    }
+        let generator = envyr::meta::Generator::new(pack.clone());
+        generator.generate(&canon_path, &config.executor)?;
+        Some(pack)
+    } else {
+        None
+    };
     match config.executor {
         envyr::meta::Executors::Docker => {
             let opts = envyr::docker::DockerRunOpts {
@@ -352,7 +355,18 @@ fn run(envyr_root: &Path, config: RunConfig, start: Instant) -> Result<()> {
             };
             envyr::docker::run(&canon_path, opts, start)?;
         }
-        envyr::meta::Executors::Native => todo!("Native executor not yet implemented"),
+        envyr::meta::Executors::Native => {
+            let pack = pack.map_or_else(
+                || envyr::package::Pack::load(&canon_path),
+                Ok,
+            )?;
+            let opts = envyr::native::NativeRunOpts {
+                env_map: config.env_map,
+                timeout: config.timeout,
+                args: config.args,
+            };
+            envyr::native::run(&canon_path, envyr_root, &pack, opts, start)?;
+        }
     }
     Ok(())
 }
@@ -362,7 +376,7 @@ fn generate(canon_path: PathBuf, args: OverrideOpts) -> Result<()> {
     let pack_builder = override_builder_opts(args, pack_builder);
     let pack = pack_builder.build()?;
     let generator = envyr::meta::Generator::new(pack);
-    generator.generate(&canon_path)?;
+    generator.generate(&canon_path, &envyr::meta::Executors::Docker)?;
     Ok(())
 }
 
