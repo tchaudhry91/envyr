@@ -79,10 +79,10 @@ pub fn run(
         interactive_mode = "-it";
     }
 
-    let mut network_name: String = "".to_string();
-    if network.is_some() {
-        network_name = format!("--network={}", network.unwrap())
-    }
+    let network_name = match network {
+        Some(n) => format!("--network={}", n),
+        None => String::new(),
+    };
 
     // Generate a unique container name for timeout handling
     let container_name = if timeout.is_some() {
@@ -90,7 +90,7 @@ pub fn run(
             std::process::id(), 
             std::time::SystemTime::now()
                 .duration_since(std::time::UNIX_EPOCH)
-                .unwrap()
+                .expect("system clock is before UNIX epoch")
                 .as_secs()
         ))
     } else {
@@ -210,7 +210,11 @@ fn get_fs_map_str(fs_map: Vec<String>) -> String {
 }
 
 fn get_image_name(project_root: &Path, tag: String) -> Result<String> {
-    let mut name_str = String::from(project_root.to_str().unwrap());
+    let mut name_str = String::from(
+        project_root
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Project root path contains invalid UTF-8"))?,
+    );
     name_str = name_str.replace(['/', '.'], "-");
     Ok(format!(
         "envyr{}:{}",
@@ -259,8 +263,12 @@ fn build_local(project_root: &Path, tag: String) -> Result<String> {
             "-t",
             image.as_str(),
             "-f",
-            dockerfile_path.to_str().unwrap(),
-            project_root.to_str().unwrap(),
+            dockerfile_path
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Dockerfile path contains invalid UTF-8"))?,
+            project_root
+                .to_str()
+                .ok_or_else(|| anyhow::anyhow!("Project root path contains invalid UTF-8"))?,
         ],
         popen_conf,
     )?;
@@ -297,7 +305,11 @@ pub fn generate_dockerfile(pack: &Pack, project_root: &Path) -> Result<String> {
 
     let mut d = Data {
         interpreter: interpreter.to_string(),
-        entrypoint: pack.entrypoint.to_str().unwrap().to_string(),
+        entrypoint: pack
+            .entrypoint
+            .to_str()
+            .ok_or_else(|| anyhow::anyhow!("Entrypoint path contains invalid UTF-8"))?
+            .to_string(),
         os_deps: pack.deps.clone(),
         ptype: pack.ptype.clone(),
         type_reqs: false,
@@ -558,12 +570,32 @@ mod tests {
             deps: vec![],
             entrypoint: PathBuf::from("index.js"),
         };
-        
+
         let dockerignore = generate_docker_ignore(&pack).unwrap();
-        
+
         // The current template is generic, not language-specific
         assert!(dockerignore.contains("**/node_modules"));
         assert!(dockerignore.contains("**/.git"));
         assert!(dockerignore.contains("*.pyc"));
+    }
+
+    #[test]
+    fn test_get_image_name_non_utf8_returns_error() {
+        use std::ffi::OsStr;
+        use std::os::unix::ffi::OsStrExt;
+
+        // Create a path with invalid UTF-8 bytes
+        let bad_bytes: &[u8] = &[0xff, 0xfe];
+        let bad_os_str = OsStr::from_bytes(bad_bytes);
+        let bad_path = Path::new(bad_os_str);
+
+        let result = get_image_name(bad_path, "latest".to_string());
+        assert!(result.is_err());
+        assert!(
+            result
+                .unwrap_err()
+                .to_string()
+                .contains("invalid UTF-8")
+        );
     }
 }

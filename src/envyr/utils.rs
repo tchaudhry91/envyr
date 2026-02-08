@@ -81,11 +81,7 @@ pub fn detect_main_node(project_root: &Path) -> Option<PathBuf> {
     let package_json = std::fs::read_to_string(project_root.join("package.json"));
     match package_json {
         Ok(package_json) => {
-            let v = serde_json::from_str(&package_json);
-            if v.is_err() {
-                return None;
-            }
-            let v: Value = v.unwrap();
+            let v: Value = serde_json::from_str(&package_json).ok()?;
             let main = v["main"].as_str()?;
             Some(PathBuf::from(main))
         }

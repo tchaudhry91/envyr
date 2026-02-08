@@ -153,22 +153,38 @@ fn get_storage_path(url: &str) -> Result<PathBuf> {
 
 fn get_git_provider(url: &str) -> Result<String> {
     let url = url.strip_suffix(".git").unwrap_or(url);
-    let provider = url.split(':').next().unwrap().to_string();
+    let provider = url
+        .split(':')
+        .next()
+        .ok_or_else(|| anyhow!("Failed to parse git provider from URL: {}", url))?
+        .to_string();
     let provider = provider.split('@').last().unwrap_or(&provider).to_string();
     Ok(provider)
 }
 
 fn get_org_name(url: &str) -> Result<String> {
     let url = url.strip_suffix(".git").unwrap_or(url);
-    let name = url.split('/').nth_back(1).unwrap().to_string();
-    let name = name.split(':').last().unwrap().to_string();
+    let name = url
+        .split('/')
+        .nth_back(1)
+        .ok_or_else(|| anyhow!("Failed to parse org name from URL: {}", url))?
+        .to_string();
+    let name = name
+        .split(':')
+        .last()
+        .ok_or_else(|| anyhow!("Failed to parse org name from URL: {}", url))?
+        .to_string();
     Ok(name)
 }
 
 // Get project name for git repository
 fn get_project_name(url: &str) -> Result<String> {
     let url = url.strip_suffix(".git").unwrap_or(url);
-    let name = url.split('/').last().unwrap().to_string();
+    let name = url
+        .split('/')
+        .last()
+        .ok_or_else(|| anyhow!("Failed to parse project name from URL: {}", url))?
+        .to_string();
     Ok(name)
 }
 
@@ -189,5 +205,26 @@ mod tests {
 
         let full_path = get_storage_path(url).unwrap();
         assert_eq!(full_path, PathBuf::from("github.com/envyr-lang/envyr"));
+    }
+
+    #[test]
+    fn test_get_org_name_no_slash() {
+        let result = get_org_name("no-slash-here");
+        assert!(result.is_err());
+    }
+
+    #[test]
+    fn test_get_project_name_without_git_suffix() {
+        let url = "git@github.com:org/my-project";
+        let name = get_project_name(url).unwrap();
+        assert_eq!(name, "my-project");
+    }
+
+    #[test]
+    fn test_get_git_provider_https_style() {
+        // Documents current behavior: HTTPS URLs return "https" not the hostname
+        let url = "https://github.com/org/repo.git";
+        let provider = get_git_provider(url).unwrap();
+        assert_eq!(provider, "https");
     }
 }

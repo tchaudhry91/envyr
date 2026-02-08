@@ -141,7 +141,7 @@ enum Command {
 
 #[derive(Parser)]
 #[command(name = "envyr")]
-#[command(author = "Tanmay Chaudhry <tanmay.chaudhry@gmail.com")]
+#[command(author = "Tanmay Chaudhry <tanmay.chaudhry@gmail.com>")]
 #[command(about="A tool to automagically create 'executable' packages for your scripts.", long_about=None)]
 #[command(version = "0.2.1")]
 pub struct App {
@@ -173,12 +173,13 @@ fn setup_logging(verbose: bool) -> Result<()> {
 }
 
 fn get_alias_config(envyr_root: PathBuf, alias: String) -> Option<RunConfig> {
-    let aliases = meta::load_aliases(&envyr_root);
-    if aliases.is_err() {
-        debug!("No aliases found.");
-        return None;
-    }
-    let aliases = aliases.unwrap();
+    let aliases = match meta::load_aliases(&envyr_root) {
+        Ok(a) => a,
+        Err(_) => {
+            debug!("No aliases found.");
+            return None;
+        }
+    };
     aliases.get(&alias).cloned()
 }
 
@@ -203,7 +204,8 @@ fn main() -> Result<()> {
     let app = App::parse();
 
     // TODO: Make this configurable later
-    let homedir = home::home_dir().unwrap();
+    let homedir = home::home_dir()
+        .ok_or_else(|| anyhow::anyhow!("Could not determine home directory. Is $HOME set?"))?;
     let envyr_root = homedir.join(".envyr");
 
     setup_logging(app.verbose)?;
