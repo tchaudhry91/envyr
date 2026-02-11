@@ -81,10 +81,11 @@ pub fn run(
         image = build_local(&executor, project_root, opts.tag, opts.build_timeout)?;
     }
 
-    let mut interactive_mode = "";
-    if opts.interactive {
-        interactive_mode = "-it";
-    }
+    let interactive_mode = if opts.interactive {
+        "-it"
+    } else {
+        "-i"
+    };
 
     let network_name = match opts.network {
         Some(n) => format!("--network={}", n),
